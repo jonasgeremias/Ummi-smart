@@ -2880,94 +2880,94 @@ LOAD C:/ST/STM32CubeIDE_1.15.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.ext
 .rel.dyn        0x08001b68        0x0
  .rel.iplt      0x08001b68        0x0 C:/ST/STM32CubeIDE_1.15.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.win32_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+fp/hard/crtbegin.o
 
-.data           0x20000000        0xc load address 0x08001b68
+.data           0x20000000       0x14 load address 0x08001b68
                 0x20000000                        . = ALIGN (0x4)
                 0x20000000                        _sdata = .
  *(.data)
  *(.data*)
+ .data.unidade  0x20000000        0x1 ./Core/Src/display.o
+                0x20000000                unidade
+ .data.dezena   0x20000001        0x1 ./Core/Src/display.o
+                0x20000001                dezena
+ .data.centena  0x20000002        0x1 ./Core/Src/display.o
+                0x20000002                centena
+ .data.milhar   0x20000003        0x1 ./Core/Src/display.o
+                0x20000003                milhar
+ .data.dezena_milhar
+                0x20000004        0x1 ./Core/Src/display.o
+                0x20000004                dezena_milhar
+ .data.centena_milhar
+                0x20000005        0x1 ./Core/Src/display.o
+                0x20000005                centena_milhar
+ *fill*         0x20000006        0x2 
  .data.SystemCoreClock
-                0x20000000        0x4 ./Core/Src/system_stm32f4xx.o
-                0x20000000                SystemCoreClock
+                0x20000008        0x4 ./Core/Src/system_stm32f4xx.o
+                0x20000008                SystemCoreClock
  .data.uwTickPrio
-                0x20000004        0x4 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.o
-                0x20000004                uwTickPrio
+                0x2000000c        0x4 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.o
+                0x2000000c                uwTickPrio
  .data.uwTickFreq
-                0x20000008        0x1 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.o
-                0x20000008                uwTickFreq
+                0x20000010        0x1 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.o
+                0x20000010                uwTickFreq
  *(.RamFunc)
  *(.RamFunc*)
-                0x2000000c                        . = ALIGN (0x4)
- *fill*         0x20000009        0x3 
-                0x2000000c                        _edata = .
+                0x20000014                        . = ALIGN (0x4)
+ *fill*         0x20000011        0x3 
+                0x20000014                        _edata = .
 
-.igot.plt       0x2000000c        0x0 load address 0x08001b74
- .igot.plt      0x2000000c        0x0 C:/ST/STM32CubeIDE_1.15.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.win32_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+fp/hard/crtbegin.o
-                0x2000000c                        . = ALIGN (0x4)
+.igot.plt       0x20000014        0x0 load address 0x08001b7c
+ .igot.plt      0x20000014        0x0 C:/ST/STM32CubeIDE_1.15.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.win32_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+fp/hard/crtbegin.o
+                0x20000014                        . = ALIGN (0x4)
 
-.bss            0x2000000c       0x40 load address 0x08001b74
-                0x2000000c                        _sbss = .
-                0x2000000c                        __bss_start__ = _sbss
+.bss            0x20000014       0x38 load address 0x08001b7c
+                0x20000014                        _sbss = .
+                0x20000014                        __bss_start__ = _sbss
  *(.bss)
- .bss           0x2000000c       0x1c C:/ST/STM32CubeIDE_1.15.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.win32_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+fp/hard/crtbegin.o
+ .bss           0x20000014       0x1c C:/ST/STM32CubeIDE_1.15.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.win32_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+fp/hard/crtbegin.o
  *(.bss*)
- .bss.display   0x20000028        0x1 ./Core/Src/display.o
-                0x20000028                display
- .bss.unidade   0x20000029        0x1 ./Core/Src/display.o
-                0x20000029                unidade
- .bss.dezena    0x2000002a        0x1 ./Core/Src/display.o
-                0x2000002a                dezena
- .bss.centena   0x2000002b        0x1 ./Core/Src/display.o
-                0x2000002b                centena
- .bss.milhar    0x2000002c        0x1 ./Core/Src/display.o
-                0x2000002c                milhar
- .bss.dezena_milhar
-                0x2000002d        0x1 ./Core/Src/display.o
-                0x2000002d                dezena_milhar
- .bss.centena_milhar
-                0x2000002e        0x1 ./Core/Src/display.o
-                0x2000002e                centena_milhar
- *fill*         0x2000002f        0x1 
+ .bss.display   0x20000030        0x1 ./Core/Src/display.o
+                0x20000030                display
+ *fill*         0x20000031        0x1 
  .bss.timer_3ms
-                0x20000030        0x2 ./Core/Src/timer.o
-                0x20000030                timer_3ms
- .bss.timer_5ms
                 0x20000032        0x2 ./Core/Src/timer.o
-                0x20000032                timer_5ms
- .bss.timer_10ms
+                0x20000032                timer_3ms
+ .bss.timer_5ms
                 0x20000034        0x2 ./Core/Src/timer.o
-                0x20000034                timer_10ms
- .bss.timer_50ms
+                0x20000034                timer_5ms
+ .bss.timer_10ms
                 0x20000036        0x2 ./Core/Src/timer.o
-                0x20000036                timer_50ms
- .bss.timer_100ms
+                0x20000036                timer_10ms
+ .bss.timer_50ms
                 0x20000038        0x2 ./Core/Src/timer.o
-                0x20000038                timer_100ms
- .bss.timer_500ms
+                0x20000038                timer_50ms
+ .bss.timer_100ms
                 0x2000003a        0x2 ./Core/Src/timer.o
-                0x2000003a                timer_500ms
- .bss.timer_1000ms
+                0x2000003a                timer_100ms
+ .bss.timer_500ms
                 0x2000003c        0x2 ./Core/Src/timer.o
-                0x2000003c                timer_1000ms
+                0x2000003c                timer_500ms
+ .bss.timer_1000ms
+                0x2000003e        0x2 ./Core/Src/timer.o
+                0x2000003e                timer_1000ms
  .bss.timer_flag_3ms
-                0x2000003e        0x1 ./Core/Src/timer.o
-                0x2000003e                timer_flag_3ms
- .bss.timer_flag_5ms
-                0x2000003f        0x1 ./Core/Src/timer.o
-                0x2000003f                timer_flag_5ms
- .bss.timer_flag_10ms
                 0x20000040        0x1 ./Core/Src/timer.o
-                0x20000040                timer_flag_10ms
- .bss.timer_flag_100ms
+                0x20000040                timer_flag_3ms
+ .bss.timer_flag_5ms
                 0x20000041        0x1 ./Core/Src/timer.o
-                0x20000041                timer_flag_100ms
- .bss.timer_flag_500ms
+                0x20000041                timer_flag_5ms
+ .bss.timer_flag_10ms
                 0x20000042        0x1 ./Core/Src/timer.o
-                0x20000042                timer_flag_500ms
- .bss.timer_cnt_1000ms
+                0x20000042                timer_flag_10ms
+ .bss.timer_flag_100ms
                 0x20000043        0x1 ./Core/Src/timer.o
-                0x20000043                timer_cnt_1000ms
- .bss.correcao  0x20000044        0x2 ./Core/Src/timer.o
- *fill*         0x20000046        0x2 
+                0x20000043                timer_flag_100ms
+ .bss.timer_flag_500ms
+                0x20000044        0x1 ./Core/Src/timer.o
+                0x20000044                timer_flag_500ms
+ .bss.timer_cnt_1000ms
+                0x20000045        0x1 ./Core/Src/timer.o
+                0x20000045                timer_cnt_1000ms
+ .bss.correcao  0x20000046        0x2 ./Core/Src/timer.o
  .bss.uwTick    0x20000048        0x4 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.o
                 0x20000048                uwTick
  *(COMMON)
@@ -2976,7 +2976,7 @@ LOAD C:/ST/STM32CubeIDE_1.15.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.ext
                 0x2000004c                        __bss_end__ = _ebss
 
 ._user_heap_stack
-                0x2000004c      0x604 load address 0x08001b74
+                0x2000004c      0x604 load address 0x08001b7c
                 0x20000050                        . = ALIGN (0x8)
  *fill*         0x2000004c        0x4 
                 [!provide]                        PROVIDE (end = .)
@@ -3188,30 +3188,30 @@ LOAD C:/ST/STM32CubeIDE_1.15.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.ext
  .debug_line    0x0000509c      0xd8a ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.o
  .debug_line    0x00005e26      0xd0a ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc_ex.o
 
-.debug_str      0x00000000    0x715e6
- .debug_str     0x00000000    0x6fd4a ./Core/Src/display.o
-                              0x70024 (size before relaxing)
- .debug_str     0x0006fd4a      0x2fa ./Core/Src/main.o
-                              0x70279 (size before relaxing)
- .debug_str     0x00070044       0x2c ./Core/Src/stm32f4xx_hal_msp.o
+.debug_str      0x00000000    0x7163b
+ .debug_str     0x00000000    0x6fd49 ./Core/Src/display.o
+                              0x70023 (size before relaxing)
+ .debug_str     0x0006fd49      0x2fa ./Core/Src/main.o
+                              0x70278 (size before relaxing)
+ .debug_str     0x00070043       0x82 ./Core/Src/stm32f4xx_hal_msp.o
                               0x6f965 (size before relaxing)
- .debug_str     0x00070070      0x125 ./Core/Src/stm32f4xx_it.o
+ .debug_str     0x000700c5      0x125 ./Core/Src/stm32f4xx_it.o
                               0x6f964 (size before relaxing)
- .debug_str     0x00070195       0xdb ./Core/Src/system_stm32f4xx.o
+ .debug_str     0x000701ea       0xdb ./Core/Src/system_stm32f4xx.o
                               0x6f523 (size before relaxing)
- .debug_str     0x00070270      0x130 ./Core/Src/timer.o
+ .debug_str     0x000702c5      0x130 ./Core/Src/timer.o
                               0x6f9fe (size before relaxing)
- .debug_str     0x000703a0       0x44 ./Core/Startup/startup_stm32f410rbtx.o
+ .debug_str     0x000703f5       0x44 ./Core/Startup/startup_stm32f410rbtx.o
                                  0x9a (size before relaxing)
- .debug_str     0x000703e4      0x97c ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.o
+ .debug_str     0x00070439      0x97c ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.o
                               0x6ff19 (size before relaxing)
- .debug_str     0x00070d60      0x3a3 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.o
+ .debug_str     0x00070db5      0x3a3 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.o
                               0x6fcb2 (size before relaxing)
- .debug_str     0x00071103      0x131 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.o
+ .debug_str     0x00071158      0x131 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.o
                               0x6f6a4 (size before relaxing)
- .debug_str     0x00071234      0x233 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.o
+ .debug_str     0x00071289      0x233 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.o
                               0x6f95c (size before relaxing)
- .debug_str     0x00071467      0x17f ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc_ex.o
+ .debug_str     0x000714bc      0x17f ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc_ex.o
                               0x6f76f (size before relaxing)
 
 .comment        0x00000000       0x43

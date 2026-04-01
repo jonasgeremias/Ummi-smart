@@ -11,12 +11,12 @@
 #include "main.h"
 
 uint8_t display = 0;
-uint8_t unidade = 0;
-uint8_t dezena = 0;
-uint8_t centena = 0;
-uint8_t milhar = 0;
-uint8_t dezena_milhar = 0;
-uint8_t centena_milhar = 0;
+uint8_t unidade = 6;
+uint8_t dezena = 5;
+uint8_t centena = 4;
+uint8_t milhar = 3;
+uint8_t dezena_milhar = 2;
+uint8_t centena_milhar = 1;
 
 
 const uint8_t tabela_display[] = {

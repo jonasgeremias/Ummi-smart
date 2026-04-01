@@ -60,8 +60,8 @@ all: main-build
 main-build: CBS_01-Contador_de_Pecas.elf secondary-outputs
 
 # Tool invocations
-CBS_01-Contador_de_Pecas.elf CBS_01-Contador_de_Pecas.map: $(OBJS) $(USER_OBJS) C:\Users\Lucas\Documents\Projetos\10250338\ -\ CBS-01\ R1.0\Contador\ de\ peças\ Arm\STM32F410RBTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "CBS_01-Contador_de_Pecas.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\Lucas\Documents\Projetos\10250338 - CBS-01 R1.0\Contador de peças Arm\STM32F410RBTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="CBS_01-Contador_de_Pecas.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+CBS_01-Contador_de_Pecas.elf CBS_01-Contador_de_Pecas.map: $(OBJS) $(USER_OBJS) C:\Users\Lucas\Documents\Projetos\10250338\ -\ CBS-01\ R1.0\Contador_de_pecas_Arm\STM32F410RBTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "CBS_01-Contador_de_Pecas.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\Lucas\Documents\Projetos\10250338 - CBS-01 R1.0\Contador_de_pecas_Arm\STM32F410RBTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="CBS_01-Contador_de_Pecas.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
