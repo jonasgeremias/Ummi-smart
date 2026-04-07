@@ -1,6 +1,6 @@
-../Core/Src/main.c:68:5:main	1
-../Core/Src/main.c:114:6:SystemClock_Config	3
-../Core/Src/main.c:156:13:MX_I2C1_Init	2
-../Core/Src/main.c:190:13:MX_GPIO_Init	1
-../Core/Src/main.c:245:6:contagem	3
-../Core/Src/main.c:261:6:Error_Handler	1
+../Core/Src/main.c:70:5:main	1
+../Core/Src/main.c:115:6:SystemClock_Config	3
+../Core/Src/main.c:157:13:MX_I2C1_Init	2
+../Core/Src/main.c:191:13:MX_GPIO_Init	1
+../Core/Src/main.c:252:6:contagem	4
+../Core/Src/main.c:281:6:Error_Handler	1

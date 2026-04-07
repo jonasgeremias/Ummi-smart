@@ -95,6 +95,8 @@ void contagem(void);
 #define PB6_PIN_I2C1_SCL_GPIO_Port GPIOB
 #define PB7_PIN_I2C1_SDA_Pin GPIO_PIN_7
 #define PB7_PIN_I2C1_SDA_GPIO_Port GPIOB
+#define PB8_PIN_ENTRADA_01_Pin GPIO_PIN_8
+#define PB8_PIN_ENTRADA_01_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

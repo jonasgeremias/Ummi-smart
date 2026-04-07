@@ -8,6 +8,11 @@
 #ifndef INC_DEFINES_H_
 #define INC_DEFINES_H_
 
+#include "stm32f4xx_hal.h"
+#include <stdint.h>
+#include <stdbool.h>
+#include "main.h"
+
 // display
 #define SEG_A_PIN GPIO_PIN_5
 #define SEG_A_GPIO_PORT GPIOA
@@ -54,8 +59,8 @@
 #define TURBO_LEVEL3 3
 
 // entradas digitais
-// #define INPUT_01 PB8_INPUT_01_Pin
-// #define INPUT_01_PORT PB8_INPUT_01_GPIO_Port
+#define INPUT_01 PB8_PIN_ENTRADA_01_Pin
+#define INPUT_01_PORT PB8_PIN_ENTRADA_01_GPIO_Port
 // #define INPUT_02 PB9_INPUT_02_Pin
 // #define INPUT_02_PORT PB9_INPUT_02_GPIO_Port
 
