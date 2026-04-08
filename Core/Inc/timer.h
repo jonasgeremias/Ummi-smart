@@ -29,6 +29,7 @@ extern volatile uint8_t timer_flag_50ms;
 extern volatile uint8_t timer_flag_100ms;
 extern volatile uint8_t timer_flag_500ms;
 extern volatile uint8_t timer_flag_1000ms;
+extern volatile uint8_t timer_flag_5s;
 extern volatile uint8_t timer_cnt_1000ms;
 
 // botão max
@@ -37,6 +38,7 @@ extern volatile uint8_t btn_max_status;
 extern volatile uint16_t btn_max_contador;
 extern volatile uint8_t btn_max_borda_anterior;
 extern volatile uint8_t btn_max_turbo;
+extern volatile uint8_t btn_max_evento;
 
 // botão min
 extern volatile uint16_t btn_min_timeout;
@@ -44,16 +46,22 @@ extern volatile uint8_t btn_min_status;
 extern volatile uint16_t btn_min_contador;
 extern volatile uint8_t btn_min_borda_anterior;
 extern volatile uint8_t btn_min_turbo;
+extern volatile uint8_t btn_min_evento;
 
 // botão relogio
 extern volatile uint8_t btn_relogio_status;
 extern volatile uint8_t btn_relogio_borda_anterior;
 extern volatile uint16_t btn_relogio_contador;
+extern volatile uint16_t btn_relogio_hold;
+extern volatile uint8_t btn_relogio_evento;
 
 // entrada digital
 extern volatile uint8_t entrada_digital_status;
 extern volatile uint8_t entrada_digital_borda_anterior;
 extern volatile uint16_t entrada_digital_contador;
+
+//outras variaveis
+
 
 
 
@@ -65,10 +73,12 @@ void tmr_50ms(void);
 void tmr_100ms(void);
 void tmr_500ms(void);
 void tmr_1000ms(void);
+// void tmr_5s(void);
 
 void display_scan(void);
 void debounce_btns(void);
 void debounce_entradas_digitais(void);
+void btn_relogio_processado(void);
 // void serialHandleTimeout1ms(void);
 
 #endif /* INC_TIMER_H_ */

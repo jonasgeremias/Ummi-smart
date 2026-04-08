@@ -37,6 +37,7 @@ volatile uint8_t btn_max_status = 0;
 volatile uint16_t btn_max_contador = 0;
 volatile uint8_t btn_max_borda_anterior = 0;
 volatile uint8_t btn_max_turbo = 0;
+volatile uint8_t btn_max_evento = 0;
 
 // botão min
 volatile uint16_t btn_min_timeout = 0;
@@ -44,16 +45,21 @@ volatile uint8_t btn_min_status = 0;
 volatile uint16_t btn_min_contador = 0;
 volatile uint8_t btn_min_borda_anterior = 0;
 volatile uint8_t btn_min_turbo = 0;
+volatile uint8_t btn_min_evento = 0;
 
 // botão relogio
 volatile uint8_t btn_relogio_status = 0;
 volatile uint8_t btn_relogio_borda_anterior = 0;
 volatile uint16_t btn_relogio_contador = 0;
+volatile uint16_t btn_relogio_hold = 0;
+volatile uint8_t btn_relogio_evento = 0;
 
 // entradas digitais
 volatile uint16_t entrada_digital_contador = 0;
 volatile uint8_t entrada_digital_status = 0;
 volatile uint8_t entrada_digital_borda_anterior = 0;
+
+// outras variaveis
 
 void mainIsr(void) {
 
@@ -107,6 +113,9 @@ void tmr_3ms() {
   display_scan();
   debounce_btns();
   debounce_entradas_digitais();
+  btn_relogio_processado();
+  btn_max_processado();
+  btn_min_processado();
 }
 void tmr_5ms() { timer_flag_5ms = 1; }
 void tmr_10ms() { timer_flag_10ms = 1; }
@@ -163,6 +172,5 @@ void debounce_entradas_digitais() {
     entrada_digital_contador = 0;
     entrada_digital_status = 0;
   }
-
-  //detecção de borda
 }
+

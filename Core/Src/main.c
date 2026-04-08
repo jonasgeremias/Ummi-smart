@@ -13,6 +13,10 @@
  * in the root directory of this software component.
  * If no LICENSE file comes with this software, it is provided AS-IS.
  *
+ * 
+ * PROJETO CONTADOR DE PEÇAS COM DISPLAY 7 SEGMENTOS
+ * GRAVAÇÃO DE VALORES NA EEPROM
+ * 
  ******************************************************************************
  */
 /* USER CODE END Header */
@@ -48,6 +52,17 @@ I2C_HandleTypeDef hi2c1;
 /* USER CODE BEGIN PV */
 uint32_t contador_pecas = 0;
 uint32_t contador_pecas_anterior = 0;
+uint32_t setpoint = 100;
+uint32_t setpoint_obrigatorio = 500;
+
+//Variáveis para controle do modo
+uint8_t modo = 0;
+
+//variaveis auxiliares
+uint8_t saida_01 = 0;
+//uint8_t btn_relogio_evento = 0;
+//flags auxiliares
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -103,7 +118,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    contagem();
+    // btn_relogio_processado();
+    modo_operacao();
+    //contagem();
   }
   /* USER CODE END 3 */
 }
@@ -212,7 +229,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pins : PC1_PIN_INPUT_MEMBRANA_01_Pin PC2_PIN_INPUT_MEMBRANA_02_Pin PC3_PIN_INPUT_MEMBRANA_03_Pin */
   GPIO_InitStruct.Pin = PC1_PIN_INPUT_MEMBRANA_01_Pin|PC2_PIN_INPUT_MEMBRANA_02_Pin|PC3_PIN_INPUT_MEMBRANA_03_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PA5_PIN_DISPLAY_A_Pin PA6_PIN_DISPLAY_B_Pin PA7_PIN_DISPLAY_C_Pin */
@@ -249,19 +266,149 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void contagem() {
-  static uint8_t trava = 0;
+void modo_operacao(){
 
+  switch (btn_relogio_evento){
+    case 1: 
+      if (modo == 0){
+        modo = 1;
+      }else if (modo == 1){
+        modo = 2;
+      }else{
+        modo = 0;
+      }
+      break;
+    
+    case 2:
+      modo = 0;
+      break;
+
+    case 3:
+      break;
+  }
+
+  btn_relogio_evento = 0;
+  switch(modo){
+    case 0: contagem(); break;
+    case 1: modo_setpoint(); break;
+    case 2: modo_setpoint_obrigatorio(); break;
+  }
+}
+
+void contagem(){
+  static uint8_t trava = 0;
+  
+  display_atualiza(contador_pecas);
   if ((entrada_digital_status) && (!trava)) {
     trava = 1;
     contador_pecas++;
     contador_pecas_anterior = contador_pecas;
-    display_atualiza(contador_pecas);
   }
+
+  if (contador_pecas > setpoint){
+    saida_01 = 1;
+  }
+
   if (!entrada_digital_status) {
     trava = 0;
   }
 }
+
+void modo_setpoint(){
+  uint8_t max_event = btn_max_evento;
+  uint8_t min_event = btn_min_evento;
+  
+  btn_max_evento = 0;
+  btn_min_evento = 0;
+
+  if (setpoint > 999999){
+    setpoint = 0;
+  }else if (setpoint < 0){
+    setpoint = 999999;
+  }
+
+  if (max_event){
+    setpoint++;
+  }
+  if (min_event){
+    if (setpoint > 0){
+      setpoint--;
+    }
+  }
+  display_atualiza(setpoint);
+  // Implementar lógica para modo de configuração do setpoint
+}
+
+void modo_setpoint_obrigatorio(){
+  uint8_t max_event = btn_max_evento;
+  uint8_t min_event = btn_min_evento;
+  
+  btn_max_evento = 0;
+  btn_min_evento = 0;
+
+  if (setpoint_obrigatorio > 999999){
+    setpoint_obrigatorio = 0;
+  }else if (setpoint_obrigatorio < 0){
+    setpoint_obrigatorio = 999999;
+  }
+
+  if (max_event){
+    setpoint_obrigatorio++;
+  }
+  if (min_event){
+    if (setpoint_obrigatorio > 0){
+      setpoint_obrigatorio--;
+    }
+  }
+  display_atualiza(setpoint_obrigatorio);
+  // Implementar lógica para modo de configuração do setpoint obrigatório
+}
+
+void btn_relogio_processado(void){
+
+  // borda de subida
+  if (btn_relogio_status && !btn_relogio_borda_anterior){
+    btn_relogio_contador = 0;
+    btn_relogio_hold = 0;
+  }
+
+  // botão pressionado
+  if (btn_relogio_status){
+
+    if (btn_relogio_contador < 1000)
+      btn_relogio_contador++;
+
+    // LONG PRESS (1x só)
+    if (btn_relogio_contador == TEMPO_LONG_PRESS){
+      btn_relogio_evento = 2;
+    }
+  }
+
+  // borda de descida → CLICK
+  if (!btn_relogio_status && btn_relogio_borda_anterior){
+    if (btn_relogio_contador < TEMPO_LONG_PRESS){
+      btn_relogio_evento = 1;
+    }
+  }
+
+  btn_relogio_borda_anterior = btn_relogio_status;
+}
+
+void btn_max_processado(){
+  if (btn_max_status && !btn_max_borda_anterior){
+    btn_max_evento = 1;
+  }
+  btn_max_borda_anterior = btn_max_status;
+}
+
+void btn_min_processado(){
+  if (btn_min_status && !btn_min_borda_anterior){
+    btn_min_evento = 1;
+  }
+  btn_min_borda_anterior = btn_min_status;
+}
+
+
 /* USER CODE END 4 */
 
 /**

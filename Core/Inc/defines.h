@@ -84,6 +84,11 @@
 #define HIGH GPIO_PIN_SET
 #define LOW GPIO_PIN_RESET
 
+#define MODO_CONTADOR 0
+#define MODO_SETPOINT 1
+#define MODO_OBRIGATORIO 2 
 
+#define TEMPO_LONG_PRESS 100
+#define TEMPO_REPEAT 30
 
 #endif /* INC_DEFINES_H_ */

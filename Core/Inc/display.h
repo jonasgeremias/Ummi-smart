@@ -16,4 +16,11 @@ void escreve_segmentos(uint8_t valor);
 void desliga_displays(uint8_t d);
 void display_atualiza(uint32_t valor);
 
+extern uint8_t unidade;
+extern uint8_t dezena;
+extern uint8_t centena;
+extern uint8_t milhar;
+extern uint8_t dezena_milhar;
+extern uint8_t centena_milhar;
+
 #endif /* INC_DISPLAY_H_ */
