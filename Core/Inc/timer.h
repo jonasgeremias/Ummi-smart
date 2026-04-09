@@ -61,7 +61,7 @@ extern volatile uint8_t entrada_digital_borda_anterior;
 extern volatile uint16_t entrada_digital_contador;
 
 //outras variaveis
-
+extern volatile uint16_t splash_timeout;
 
 
 

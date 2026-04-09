@@ -23,4 +23,7 @@ extern uint8_t milhar;
 extern uint8_t dezena_milhar;
 extern uint8_t centena_milhar;
 
+extern volatile uint16_t splash_timeout;
+extern volatile uint8_t splash_digits[6];
+
 #endif /* INC_DISPLAY_H_ */

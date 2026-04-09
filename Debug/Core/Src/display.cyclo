@@ -1,4 +1,4 @@
-../Core/Src/display.c:59:6:escreve_segmentos	1
-../Core/Src/display.c:78:6:display_atualiza	1
-../Core/Src/display.c:87:6:display_scan	9
-../Core/Src/display.c:141:6:desliga_displays	7
+../Core/Src/display.c:61:6:escreve_segmentos	1
+../Core/Src/display.c:80:6:display_atualiza	1
+../Core/Src/display.c:143:6:display_scan	16
+../Core/Src/display.c:212:6:desliga_displays	7

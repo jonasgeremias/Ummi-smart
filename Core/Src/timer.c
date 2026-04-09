@@ -30,6 +30,7 @@ volatile uint8_t timer_cnt_1000ms = 0;
 
 
 static uint16_t correcao = 0;
+volatile uint16_t splash_timeout = 0;
 
 // botão max
 volatile uint16_t btn_max_timeout = 0;
@@ -116,7 +117,12 @@ void tmr_3ms() {
   btn_relogio_processado();
 }
 void tmr_5ms() { timer_flag_5ms = 1; }
-void tmr_10ms() { timer_flag_10ms = 1; }
+void tmr_10ms() { 
+  timer_flag_10ms = 1;
+  if (splash_timeout > 0){
+    splash_timeout--;
+  }
+}
 void tmr_50ms() {
   timer_flag_50ms = 1;
   if (btn_max_timeout > 0)

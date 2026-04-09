@@ -62,6 +62,10 @@ void btn_relogio_processado();
 // void btn_max_processado();
 // void btn_min_processado();
 void le_botoes();
+void splash_screen(uint16_t tempo_ms, uint8_t d5, uint8_t d4, uint8_t d3, uint8_t d2, uint8_t d1, uint8_t d0);
+
+void salva_configs();
+void carrega_config();
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
