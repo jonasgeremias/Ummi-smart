@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include "defines.h"
 
+volatile uint16_t timer_1ms = 0;
 volatile uint16_t timer_3ms = 0;
 volatile uint16_t timer_5ms = 0;
 volatile uint16_t timer_10ms = 0;
@@ -19,6 +20,7 @@ volatile uint16_t timer_50ms = 0;
 volatile uint16_t timer_100ms = 0;
 volatile uint16_t timer_500ms = 0;
 volatile uint16_t timer_1000ms = 0;
+volatile uint8_t timer_flag_1ms = 0;
 volatile uint8_t timer_flag_3ms = 0;
 volatile uint8_t timer_flag_5ms = 0;
 volatile uint8_t timer_flag_10ms = 0;
@@ -68,6 +70,10 @@ void mainIsr(void) {
   //serialHandleTimeout1ms();
 
   // scan_display();
+  if (++timer_1ms >= 1) {
+    timer_1ms = 0;
+    tmr_1ms();
+  }
 
   if (++timer_3ms >= 3) {
     timer_3ms = 0;
@@ -109,9 +115,13 @@ void mainIsr(void) {
   }
 }
 
+void tmr_1ms() { 
+  timer_flag_1ms = 1; 
+  display_scan();
+}
+
 void tmr_3ms() {
   timer_flag_3ms = 1;
-  display_scan();
   debounce_btns();
   debounce_entradas_digitais();
   btn_relogio_processado();

@@ -66,6 +66,7 @@ extern volatile uint16_t splash_timeout;
 
 
 void mainIsr(void);
+void tmr_1ms(void);
 void tmr_3ms(void);
 void tmr_5ms(void);
 void tmr_10ms(void);
