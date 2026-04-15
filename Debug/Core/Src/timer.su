@@ -6,6 +6,6 @@
 ../Core/Src/timer.c:140:6:tmr_50ms	4	static
 ../Core/Src/timer.c:147:6:tmr_100ms	4	static
 ../Core/Src/timer.c:148:6:tmr_500ms	4	static
-../Core/Src/timer.c:149:6:tmr_1000ms	4	static
-../Core/Src/timer.c:151:6:debounce_btns	8	static
-../Core/Src/timer.c:183:6:debounce_entradas_digitais	8	static
+../Core/Src/timer.c:149:6:tmr_1000ms	8	static
+../Core/Src/timer.c:154:6:debounce_btns	8	static
+../Core/Src/timer.c:186:6:debounce_entradas_digitais	8	static

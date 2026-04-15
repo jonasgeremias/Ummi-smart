@@ -499,7 +499,7 @@ void contagem() {
   // }
 
   if (contador_pecas >= setpoint_proxima_verificacao) {
-    HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01, HIGH);
+    //HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01, HIGH);
     inspecao_obrigatoria = 1;
   }
 
@@ -532,7 +532,12 @@ void contagem() {
     salva_configs();
   }
 }
+void ativa_alarme(){
 
+  if (inspecao_obrigatoria == 1) {
+    HAL_GPIO_TogglePin(SAIDA_01_PORT, SAIDA_01);
+  }
+}
 void modo_setpoint() {
   static uint32_t setpoint_guardado = 0;
 

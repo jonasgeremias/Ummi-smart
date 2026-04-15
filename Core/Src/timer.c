@@ -146,7 +146,10 @@ void tmr_50ms() {
 }
 void tmr_100ms() { timer_flag_100ms = 1; }
 void tmr_500ms() { timer_flag_500ms = 1; }
-void tmr_1000ms() { /*timer_flag_1000ms = 1;*/ timer_cnt_1000ms++; }
+void tmr_1000ms() { 
+  timer_flag_1000ms = 1; 
+  ativa_alarme();
+}
 
 void debounce_btns() {
   if (HAL_GPIO_ReadPin(BOTAO_RELOGIO_PORT, BOTAO_RELOGIO) == LOW) {

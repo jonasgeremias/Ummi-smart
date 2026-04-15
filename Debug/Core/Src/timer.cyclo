@@ -7,5 +7,5 @@
 ../Core/Src/timer.c:147:6:tmr_100ms	1
 ../Core/Src/timer.c:148:6:tmr_500ms	1
 ../Core/Src/timer.c:149:6:tmr_1000ms	1
-../Core/Src/timer.c:151:6:debounce_btns	7
-../Core/Src/timer.c:183:6:debounce_entradas_digitais	5
+../Core/Src/timer.c:154:6:debounce_btns	7
+../Core/Src/timer.c:186:6:debounce_entradas_digitais	5
