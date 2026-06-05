@@ -58,10 +58,12 @@ extern volatile uint8_t btn_relogio_evento;
 extern volatile uint8_t entrada_digital_status;
 extern volatile uint8_t entrada_digital_borda_anterior;
 extern volatile uint16_t entrada_digital_contador;
+extern volatile uint16_t entrada_digital_pulsos_pendentes;
 
 extern volatile uint8_t entrada_digital_02_status;
 extern volatile uint8_t entrada_digital_02_borda_anterior;
 extern volatile uint8_t entrada_digital_02_contador;
+extern volatile uint8_t entrada_digital_02_evento_pendente;
 
 //outras variaveis
 extern volatile uint16_t splash_timeout;

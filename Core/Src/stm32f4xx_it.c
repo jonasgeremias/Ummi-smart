@@ -201,4 +201,9 @@ void SysTick_Handler(void)
 
 /* USER CODE BEGIN 1 */
 
+void USART1_IRQHandler(void)
+{
+  serial_usart1_irq_handler();
+}
+
 /* USER CODE END 1 */

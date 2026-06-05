@@ -53,21 +53,34 @@ I2C_HandleTypeDef hi2c1;
 RTC_HandleTypeDef hrtc;
 
 /* USER CODE BEGIN PV */
-int32_t contador_pecas = 0;
-int32_t contador_pecas_anterior = 0;
-int32_t setpoint = 0;
-int32_t setpoint_boost = 0;
-int32_t setpoint_obrigatorio = 0;
-int32_t setpoint_obrigatorio_boost = 0;
+static const uint32_t VALOR_MAXIMO = 999999U;
+static const uint32_t SETPOINT_DEFAULT = 100U;
+static const uint32_t SETPOINT_OBRIGA_DEFAULT = 200U;
+static const uint32_t EEPROM_ASSINATURA_APP = 0x554D4D32U;
 
-int32_t setpoint_proxima_verificacao = 0;
-int32_t setpoint_proxima_verificacao_obrigatoria = 0;
+static uint32_t contador = 0;
+static uint32_t ultima_contagem = 0;
+static uint32_t ultima_conferencia = 0;
+static int32_t setpoint_inspecao = 0;
+static int32_t setpoint_obriga_inspecao = 0;
+static int32_t setpoint_temp = 0;
+
+static uint8_t modo = 0;
+static uint8_t atualiza_display_timeout = 0;
+static uint16_t buzzer_periodo_timeout = 0;
+static uint8_t buzzer_ligado_timeout = 0;
+static uint16_t reset_contador_timeout = 0;
+static uint16_t tac_relogio_timeout = 0;
+
+static uint32_t eeprom_timer = 0;
+uint8_t eeprom_flagaux_salvar = 0;
+
+static volatile uint8_t serial_rx_buffer[64];
+static volatile uint8_t serial_rx_head = 0;
+static volatile uint8_t serial_rx_tail = 0;
 // uint32_t setpoint = 100;
 
 // Variáveis para controle do modo
-uint8_t modo = 0;
-uint32_t setpoint_obrigatorio_contador = 0;
-uint8_t inspecao_obrigatoria = 0;
 // Variaveis display
 // volatile uint16_t splash_timeout = 0;
 
@@ -75,15 +88,8 @@ uint8_t inspecao_obrigatoria = 0;
 // uint8_t saida_01 = 0;
 
 // variaveis eeprom
-uint32_t eeprom_timer = 0;
-uint32_t setpoint_obrigatorio_guardado = 0;
 
 // flags auxiliares
-uint8_t flagaux_setpoint = 0;
-uint8_t eeprom_flagaux_salvar = 0;
-
-uint8_t flagaux_verifica_pecas = 0;
-uint8_t flagaux_verifica_pecas_obrigatoria = 0;
 
 /* USER CODE END PV */
 
@@ -92,16 +98,23 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_RTC_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 static void splash_screen(uint16_t tempo_ms, uint8_t d5, uint8_t d4,
                           uint8_t d3, uint8_t d2, uint8_t d1, uint8_t d0);
-static void modo_operacao(void);
-static void modo_setpoint(void);
-static void modo_setpoint_obrigatorio(void);
-static void contagem(void);
-static void le_botoes(void);
-static void salva_configs(void);
+static void processa_tick_50ms(void);
+static void trata_tac_relogio_press(void);
+static void trata_reset_contador(void);
+static void atualiza_display_int32(uint32_t valor);
+static void modo_contagem(void);
+static void modo_setpoint_inspecao(void);
+static void prepara_dados_eeprom(void);
+static void salva_dados_agendado(void);
+static void salva_dados_imediato(void);
+static void salva_presets_flash(void);
 static void carrega_config(void);
+static void serial_init_rx(void);
+static void serial_send_text(const char *text);
 
 /* USER CODE END PFP */
 
@@ -142,24 +155,15 @@ int main(void) {
   MX_GPIO_Init();
   MX_I2C1_Init();
   MX_RTC_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  
-  
-  splash_screen(500, DSP_B, DSP_E, DSP_I, 0, 0, 2);
-  
-  
+
   eeprom_init();
-  // dados = eeprom_read();
   carrega_config();
-  // setpoint_proxima_verificacao = contador_pecas + setpoint;
-
-  // if (dados.setpoint_obrigatorio_01 == 0xFFFF){
-  //   dados.setpoint_01 = 100;
-  //   dados.setpoint_obrigatorio_01 = 200;
-
-  //   eeprom_write(&dados);
-  // }
-  HAL_Delay(200);
+  serial_init_rx();
+  serial_send_text("UMMI CONTADOR STM\r\n");
+  splash_screen(40, DSP_B, DSP_E, DSP_1, DSP_0, DSP_0, 2);
+  modo = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -169,8 +173,19 @@ int main(void) {
 
     /* USER CODE BEGIN 3 */
 
-    le_botoes();
-    modo_operacao();
+    if (timer_flag_50ms) {
+      timer_flag_50ms = 0;
+      processa_tick_50ms();
+    }
+
+    if (modo == 0) {
+      modo_contagem();
+    } else if (modo == 1 || modo == 2) {
+      modo_setpoint_inspecao();
+    } else {
+      modo = 0;
+    }
+
     if (eeprom_flagaux_salvar == 1) {
       eeprom_timer = HAL_GetTick();
       eeprom_flagaux_salvar = 2;
@@ -182,7 +197,6 @@ int main(void) {
       }
     }
     eeprom_process();
-    // contagem();
   }
   /* USER CODE END 3 */
 }
@@ -297,6 +311,35 @@ static void MX_RTC_Init(void) {
 }
 
 /**
+ * @brief USART1 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_USART1_UART_Init(void) {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_USART1_CLK_ENABLE();
+
+  GPIO_InitStruct.Pin = GPIO_PIN_9 | GPIO_PIN_10;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  GPIO_InitStruct.Alternate = GPIO_AF7_USART1;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  USART1->CR1 = 0;
+  USART1->CR2 = 0;
+  USART1->CR3 = 0;
+  USART1->BRR = (uint16_t)((HAL_RCC_GetPCLK2Freq() + 57600U) / 115200U);
+  USART1->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE |
+                USART_CR1_UE;
+
+  HAL_NVIC_SetPriority(USART1_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(USART1_IRQn);
+}
+
+/**
  * @brief GPIO Initialization Function
  * @param None
  * @retval None
@@ -377,8 +420,14 @@ static void MX_GPIO_Init(void) {
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB8_PIN_ENTRADA_01_Pin PB9_PIN_ENTRADA_02_Pin */
-  GPIO_InitStruct.Pin = PB8_PIN_ENTRADA_01_Pin | PB9_PIN_ENTRADA_02_Pin;
+  /*Configure GPIO pin : PB8_PIN_ENTRADA_01_Pin */
+  GPIO_InitStruct.Pin = PB8_PIN_ENTRADA_01_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB9_PIN_ENTRADA_02_Pin */
+  GPIO_InitStruct.Pin = PB9_PIN_ENTRADA_02_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
@@ -389,9 +438,9 @@ static void MX_GPIO_Init(void) {
 
 /* USER CODE BEGIN 4 */
 
-static void splash_screen(uint16_t tempo_ms, uint8_t d5, uint8_t d4,
+static void splash_screen(uint16_t timeout_50ms, uint8_t d5, uint8_t d4,
                           uint8_t d3, uint8_t d2, uint8_t d1, uint8_t d0) {
-  splash_timeout = tempo_ms;
+  splash_timeout = timeout_50ms;
   splash_digits[0] = d0;
   splash_digits[1] = d1;
   splash_digits[2] = d2;
@@ -400,638 +449,311 @@ static void splash_screen(uint16_t tempo_ms, uint8_t d5, uint8_t d4,
   splash_digits[5] = d5;
 }
 
-static void modo_operacao(void) {
-
-  switch (btn_relogio_evento) {
-  case 1:
-    if (modo == 0) {
-      modo = 1;
-      flagaux_setpoint = 1;
-    } else if (modo == 1) {
-      modo = 2;
-      flagaux_setpoint = 2;
-    } else {
-      modo = 0;
-      flagaux_setpoint = 0;
-    }
-    break;
-
-  case 2:
-    modo = 0;
-    flagaux_setpoint = 0;
-    break;
-
-  case 3:
-    break;
+static void processa_tick_50ms(void) {
+  if (btn_relogio_status && tac_relogio_timeout < 65535U) {
+    tac_relogio_timeout++;
+  } else if (!btn_relogio_status) {
+    tac_relogio_timeout = 0;
   }
 
-  btn_relogio_evento = 0;
-  switch (modo) {
-  case 0:
-    contagem();
-    break;
-  case 1:
-    modo_setpoint();
-    break;
-  case 2:
-    modo_setpoint_obrigatorio();
-    break;
+  if (atualiza_display_timeout > 0) {
+    atualiza_display_timeout--;
+  }
+  if (buzzer_periodo_timeout > 0) {
+    buzzer_periodo_timeout--;
+  }
+  if (buzzer_ligado_timeout > 0) {
+    buzzer_ligado_timeout--;
+  }
+
+  if (btn_min_status && btn_max_status && reset_contador_timeout < 65535U) {
+    reset_contador_timeout++;
+  } else {
+    reset_contador_timeout = 0;
   }
 }
 
-// void contagem() {
-//   static uint8_t trava = 0;
+static void trata_tac_relogio_press(void) {
+  static uint8_t trava = 0;
+  uint16_t tempo_minimo = (modo == 0) ? 60U : 5U;
 
-//   if (contador_pecas > 999999) {
-//     contador_pecas = 0;
-//   } else if (contador_pecas < 0) {
-//     contador_pecas = 999999;
-//   }
+  if (trava || !btn_relogio_status || tac_relogio_timeout < tempo_minimo) {
+    if (!btn_relogio_status) {
+      trava = 0;
+    }
+    return;
+  }
 
-//   display_atualiza(contador_pecas);
-//   if ((entrada_digital_status) && (!trava)) {
-//     trava = 1;
-//     contador_pecas++;
-//     contador_pecas_anterior = contador_pecas;
-//   }
+  trava = 1;
 
-//   if (contador_pecas >= setpoint) {
-//     HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01, HIGH);
-//     inspecao_obrigatoria = 1;
-//   }
-//   if ((contador_pecas >= setpoint_obrigatorio) && (inspecao_obrigatoria ==
-//   1)) {
-//     HAL_GPIO_WritePin(SAIDA_02_PORT, SAIDA_02, HIGH);
-//     inspecao_obrigatoria = 2;
-//   }
+  if (modo == 0) {
+    setpoint_temp = setpoint_inspecao;
+    modo = 1;
+    splash_screen(20, DSP_S, DSP_E, DSP_T, DSP_1, DSP_N, DSP_S);
+  } else if (modo == 1) {
+    setpoint_inspecao = setpoint_temp;
+    salva_presets_flash();
+    setpoint_temp = setpoint_obriga_inspecao;
+    modo = 2;
+    splash_screen(20, DSP_S, DSP_E, DSP_T, DSP_O, DSP_B, DSP_R);
+  } else if (modo == 2) {
+    setpoint_obriga_inspecao = setpoint_temp;
+    salva_presets_flash();
+    modo = 0;
+    splash_screen(30, DSP_MINUS, DSP_0, DSP_K, DSP_U, DSP_E, DSP_MINUS);
+  }
+}
 
-//   if (!entrada_digital_status) {
-//     trava = 0;
-//   }
-
-//   if ((entrada_digital_02_status) && (inspecao_obrigatoria == 2)) {
-//     inspecao_obrigatoria = 0;
-//     HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01, LOW);
-//     HAL_GPIO_WritePin(SAIDA_02_PORT, SAIDA_02, LOW);
-//   }
-//   if (contador_pecas_anterior != contador_pecas) {
-//     salva_configs();
-//   }
-// }
-
-static void contagem(void) {
+static void trata_reset_contador(void) {
   static uint8_t trava = 0;
 
-  if (contador_pecas > 999999) {
-    contador_pecas = 0;
-  } else if (contador_pecas < 0) {
-    contador_pecas = 999999;
-  }
-
-  display_atualiza(contador_pecas);
-
-  // CONTAGEM COM TRAVA
-  if ((entrada_digital_status) && (!trava)) {
-    trava = 1;
-    contador_pecas++;
-    contador_pecas_anterior = contador_pecas;
-  }
-
-  if (!entrada_digital_status) {
-    trava = 0;
-  }
-
-  // ==============================
-  // LÓGICA DE SAÍDAS (CORRIGIDA)
-  // ==============================
-
-  // // ESTÁGIO 1 → setpoint normal
-  // if ((contador_pecas >= setpoint) && (inspecao_obrigatoria == 0)) {
-  //   HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01, HIGH);
-  //   inspecao_obrigatoria = 1;
-  // }
-
-  if (contador_pecas >= setpoint_proxima_verificacao) {
-    //HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01, HIGH);
-    inspecao_obrigatoria = 1;
-  }
-
-  // ESTÁGIO 2 → setpoint obrigatório
-  if ((contador_pecas >= setpoint_proxima_verificacao_obrigatoria) && (inspecao_obrigatoria == 1)) {
-    HAL_GPIO_WritePin(SAIDA_02_PORT, SAIDA_02, HIGH);
-    inspecao_obrigatoria = 2;
-  }
-
-  // RESET (somente após completar ciclo)
-  if ((entrada_digital_02_status) && (!trava)) {
-    if (inspecao_obrigatoria == 1) {
-      HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01, LOW);
-      inspecao_obrigatoria = 0;
-    } else if (inspecao_obrigatoria == 2) {
-      inspecao_obrigatoria = 0;
+  if (btn_min_status && btn_max_status && reset_contador_timeout >= 200U) {
+    if (!trava) {
+      trava = 1;
+      contador = 0;
+      ultima_conferencia = 0;
+      ultima_contagem = 0;
+      splash_screen(20, DSP_MINUS, DSP_MINUS, DSP_MINUS, DSP_R, DSP_S, DSP_T);
       HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01, LOW);
       HAL_GPIO_WritePin(SAIDA_02_PORT, SAIDA_02, LOW);
-    }
-
-    // HAL_GPIO_WritePin(SAIDA_02_PORT, SAIDA_02, LOW);
-
-    // 👉 MUITO IMPORTANTE: reinicia os ciclos
-    setpoint_proxima_verificacao = contador_pecas + setpoint;
-    setpoint_proxima_verificacao_obrigatoria = contador_pecas + setpoint_obrigatorio;
-  }
-
-  // SALVAÇÃO
-  if (contador_pecas_anterior != contador_pecas) {
-    salva_configs();
-  }
-}
-void ativa_alarme(void) {
-  if (inspecao_obrigatoria == 1) {
-    HAL_GPIO_TogglePin(SAIDA_01_PORT, SAIDA_01);
-  }
-}
-
-static void modo_setpoint(void) {
-  static uint32_t setpoint_guardado = 0;
-
-  setpoint = setpoint_boost;
-
-  if (setpoint != setpoint_guardado) {
-    setpoint_guardado = setpoint;
-    dados.setpoint_01 = setpoint_guardado;
-    // eeprom_write(&dados);
-    eeprom_flagaux_salvar = 1;
-    setpoint_proxima_verificacao = contador_pecas + setpoint;
-  }
-
-  if (setpoint > 999999) {
-    setpoint = 0;
-  } else if (setpoint < 0) {
-    setpoint = 999999;
-  }
-
-  display_atualiza(setpoint);
-  // salva_configs();
-  //  Implementar lógica para modo de configuração do setpoint
-}
-
-static void modo_setpoint_obrigatorio(void) {
-  static uint32_t ultimo_valor = 0;
-  static uint32_t tempo_ultima_mudanca = 0;
-
-  setpoint_obrigatorio = setpoint_obrigatorio_boost;
-
-  if (setpoint_obrigatorio != ultimo_valor) {
-    ultimo_valor = setpoint_obrigatorio;
-    tempo_ultima_mudanca = HAL_GetTick();
-  }
-
-  // Só salva se ficou 1s sem mudar
-  if ((HAL_GetTick() - tempo_ultima_mudanca) > 1000) {
-    if (dados.setpoint_obrigatorio_01 != setpoint_obrigatorio) {
-      dados.setpoint_obrigatorio_01 = setpoint_obrigatorio;
-      eeprom_flagaux_salvar = 1;
-
-      setpoint_proxima_verificacao_obrigatoria =
-          contador_pecas + setpoint_obrigatorio;
-    }
-  }
-
-  display_atualiza(setpoint_obrigatorio);
-}
-
-void btn_relogio_processado(void) {
-
-  if (setpoint_obrigatorio > 999999) {
-    setpoint_obrigatorio = 0;
-  }
-
-  // borda de subida
-  if (btn_relogio_status && !btn_relogio_borda_anterior) {
-    btn_relogio_contador = 0;
-    btn_relogio_hold = 0;
-  }
-
-  // botão pressionado
-  if (btn_relogio_status) {
-
-    if (btn_relogio_contador < 1000)
-      btn_relogio_contador++;
-
-    // LONG PRESS (1x só)
-    if (btn_relogio_contador >= TEMPO_LONG_PRESS) {
-      btn_relogio_evento = 2;
-    }
-  }
-
-  // borda de descida → CLICK
-  if (!btn_relogio_status && btn_relogio_borda_anterior) {
-    if (btn_relogio_contador < TEMPO_LONG_PRESS) {
-      btn_relogio_evento = 1;
-    }
-  }
-
-  btn_relogio_borda_anterior = btn_relogio_status;
-}
-
-// void le_botoes() {
-//   static uint8_t max_press = 0;
-//   static uint8_t min_press = 0;
-
-//   if (flagaux_setpoint == 1) {
-//     if (setpoint_boost > 999999) {
-//       setpoint_boost = 0;
-//     } else if (setpoint_boost < 0) {
-//       setpoint_boost = 999999;
-//     }
-//   }
-//   if (flagaux_setpoint == 2) {
-//     if (setpoint_obrigatorio_boost > 999999) {
-//       setpoint_obrigatorio_boost = 0;
-//     } else if (setpoint_obrigatorio_boost < 0) {
-//       setpoint_obrigatorio_boost = 999999;
-//     }
-//   }
-
-//   if (btn_max_status)
-//     max_press = 1;
-
-//   if (btn_min_status)
-//     min_press = 1;
-
-//   if (max_press && min_press) {
-
-//     if (flagaux_setpoint == 1) {
-//       setpoint_boost = 0;
-//     } else if (flagaux_setpoint == 2) {
-//       setpoint_obrigatorio_boost = 0;
-//     }
-
-//     max_press = 0;
-//     min_press = 0;
-//   }
-
-//   // reset quando solta ambos
-//   if (!btn_max_status && !btn_min_status) {
-//     max_press = 0;
-//     min_press = 0;
-//   }
-
-//   if (btn_max_status) {
-//     if (btn_max_timeout == 0) {
-//       if (btn_max_turbo >= 25) {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas += 100000;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost += 100000;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost += 100000;
-//         }
-//       } else if (btn_max_turbo >= 20) {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas += 10000;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost += 10000;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost += 10000;
-//         }
-//       } else if (btn_max_turbo >= 15) {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas += 1000;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost += 1000;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost += 1000;
-//         }
-//       } else if (btn_max_turbo >= 10) {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas += 100;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost += 100;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost += 100;
-//         }
-//       } else if (btn_max_turbo >= 8) {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas += 50;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost += 50;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost += 50;
-//         }
-//       } else if (btn_max_turbo >= 5) {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas += 10;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost += 10;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost += 10;
-//         }
-//       } else {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas++;
-//         }
-//         if (flagaux_setpoint == 1) {
-//           setpoint_boost++;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost++;
-//         }
-//       }
-//       if (btn_max_turbo < 25) {
-//         btn_max_turbo++;
-//       }
-//       if (btn_max_turbo >= 5) {
-//         btn_max_timeout = TURBO_LEVEL2;
-//       } else {
-//         btn_max_timeout = TURBO_LEVEL1;
-//       }
-//     }
-//   } else {
-//     btn_max_turbo = 0;
-//   }
-
-//   if (btn_min_status) {
-//     if (btn_min_timeout == 0) {
-//       if (btn_min_turbo >= 25) {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas -= 100000;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost -= 100000;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost -= 100000;
-//         }
-//       } else if (btn_min_turbo >= 20) {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas -= 10000;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost -= 10000;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost -= 10000;
-//         }
-//       } else if (btn_min_turbo >= 15) {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas -= 1000;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost -= 1000;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost -= 1000;
-//         }
-//       } else if (btn_min_turbo >= 10) {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas -= 100;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost -= 100;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost -= 100;
-//         }
-//       } else if (btn_min_turbo >= 8) {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas -= 50;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost -= 50;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost -= 50;
-//         }
-//       } else if (btn_min_turbo >= 5) {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas -= 10;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost -= 10;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost -= 10;
-//         }
-//       } else {
-//         if (flagaux_setpoint == 0) {
-//           contador_pecas--;
-//         } else if (flagaux_setpoint == 1) {
-//           setpoint_boost--;
-//         } else if (flagaux_setpoint == 2) {
-//           setpoint_obrigatorio_boost--;
-//         }
-//       }
-//       if (btn_min_turbo < 25) {
-//         btn_min_turbo++;
-//       }
-//       if (btn_min_turbo >= 5) {
-//         btn_min_timeout = TURBO_LEVEL2;
-//       } else {
-//         btn_min_timeout = TURBO_LEVEL1;
-//       }
-//     }
-//   } else {
-//     btn_min_turbo = 0;
-//   }
-
-//   btn_max_borda_anterior = btn_max_status;
-//   btn_min_borda_anterior = btn_min_status;
-//   btn_relogio_borda_anterior = btn_relogio_status;
-// }
-
-static void le_botoes(void) {
-  static uint8_t max_press = 0;
-  static uint8_t min_press = 0;
-
-  if (flagaux_setpoint == 1) {
-    if (setpoint_boost > 999999) {
-      setpoint_boost = 0;
-    } else if (setpoint_boost < 0) {
-      setpoint_boost = 999999;
-    }
-  }
-  if (flagaux_setpoint == 2) {
-    if (setpoint_obrigatorio_boost > 999999) {
-      setpoint_obrigatorio_boost = 0;
-    } else if (setpoint_obrigatorio_boost < 0) {
-      setpoint_obrigatorio_boost = 999999;
-    }
-  }
-
-  if (btn_max_status)
-    max_press = 1;
-
-  if (btn_min_status)
-    min_press = 1;
-
-  if (max_press && min_press) {
-
-    if (flagaux_setpoint == 1) {
-      setpoint_boost = 0;
-    } else if (flagaux_setpoint == 2) {
-      setpoint_obrigatorio_boost = 0;
-    }
-
-    max_press = 0;
-    min_press = 0;
-  }
-
-  // reset quando solta ambos
-  if (!btn_max_status && !btn_min_status) {
-    max_press = 0;
-    min_press = 0;
-  }
-
-  if (btn_max_status) {
-    if (btn_max_timeout == 0) {
-      if (btn_max_turbo >= 25) {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost += 100000;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost += 100000;
-        }
-      } else if (btn_max_turbo >= 20) {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost += 10000;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost += 10000;
-        }
-      } else if (btn_max_turbo >= 15) {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost += 1000;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost += 1000;
-        }
-      } else if (btn_max_turbo >= 10) {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost += 100;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost += 100;
-        }
-      } else if (btn_max_turbo >= 8) {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost += 50;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost += 50;
-        }
-      } else if (btn_max_turbo >= 5) {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost += 10;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost += 10;
-        }
-      } else {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost++;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost++;
-        }
-      }
-      if (btn_max_turbo < 25) {
-        btn_max_turbo++;
-      }
-      if (btn_max_turbo >= 5) {
-        btn_max_timeout = TURBO_LEVEL2;
-      } else {
-        btn_max_timeout = TURBO_LEVEL1;
-      }
+      buzzer_periodo_timeout = 0;
+      buzzer_ligado_timeout = 0;
+      atualiza_display_timeout = 0;
+      salva_dados_imediato();
     }
   } else {
+    trava = 0;
+  }
+}
+
+static void atualiza_display_int32(uint32_t valor) {
+  if (atualiza_display_timeout == 0) {
+    atualiza_display_timeout = 2;
+    display_atualiza(valor);
+  }
+}
+
+static void modo_contagem(void) {
+  uint16_t pulsos_pendentes;
+  uint8_t sensor_gabarito_evento;
+
+  if (btn_max_status && !btn_min_status) {
+    atualiza_display_int32(ultima_conferencia);
+  } else {
+    atualiza_display_int32(contador);
+  }
+
+  __disable_irq();
+  pulsos_pendentes = entrada_digital_pulsos_pendentes;
+  entrada_digital_pulsos_pendentes = 0;
+  sensor_gabarito_evento = entrada_digital_02_evento_pendente;
+  entrada_digital_02_evento_pendente = 0;
+  __enable_irq();
+
+  if (pulsos_pendentes > 0U) {
+    contador = (contador + pulsos_pendentes) % (VALOR_MAXIMO + 1U);
+    atualiza_display_timeout = 0;
+  }
+
+  if (sensor_gabarito_evento) {
+    ultima_conferencia = contador;
+    splash_screen(20, DSP_1, DSP_N, DSP_S, DSP_P, DSP_E, DSP_C);
+    salva_dados_imediato();
+  }
+
+  uint32_t diferenca;
+  if (contador >= ultima_conferencia) {
+    diferenca = contador - ultima_conferencia;
+  } else {
+    diferenca = (VALOR_MAXIMO - ultima_conferencia) + contador + 1U;
+  }
+
+  HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01,
+                    (diferenca >= (uint32_t)setpoint_inspecao) ? HIGH : LOW);
+
+  if (diferenca >= (uint32_t)setpoint_obriga_inspecao) {
+    HAL_GPIO_WritePin(SAIDA_02_PORT, SAIDA_02, HIGH);
+    if (buzzer_periodo_timeout == 0 && buzzer_ligado_timeout == 0) {
+      buzzer_ligado_timeout = 20;
+      buzzer_periodo_timeout = 200;
+    }
+    if (buzzer_ligado_timeout == 0 && buzzer_periodo_timeout == 0) {
+      buzzer_ligado_timeout = 20;
+      buzzer_periodo_timeout = 200;
+    }
+  } else {
+    HAL_GPIO_WritePin(SAIDA_02_PORT, SAIDA_02, LOW);
+    buzzer_periodo_timeout = 0;
+    buzzer_ligado_timeout = 0;
+  }
+
+  trata_tac_relogio_press();
+  trata_reset_contador();
+
+  if (contador != ultima_contagem) {
+    display_set_decimal_points(4, 0x01);
+    salva_dados_agendado();
+    ultima_contagem = contador;
+  }
+}
+
+static void modo_setpoint_inspecao(void) {
+  if (btn_max_status && btn_max_timeout == 0) {
+    if (btn_max_turbo >= 30)
+      setpoint_temp += 100;
+    else if (btn_max_turbo >= 20)
+      setpoint_temp += 20;
+    else if (btn_max_turbo >= 10)
+      setpoint_temp += 10;
+    else
+      setpoint_temp += 1;
+
+    if (setpoint_temp > (int32_t)VALOR_MAXIMO)
+      setpoint_temp = VALOR_MAXIMO;
+    if (modo == 1 && setpoint_temp > setpoint_obriga_inspecao)
+      setpoint_temp = setpoint_obriga_inspecao;
+    if (modo == 2 && setpoint_temp < setpoint_inspecao)
+      setpoint_temp = setpoint_inspecao;
+
+    if (btn_max_turbo < 30)
+      btn_max_turbo++;
+    btn_max_timeout = (btn_max_turbo >= 5) ? 4 : 7;
+    atualiza_display_timeout = 0;
+  } else if (!btn_max_status) {
+    btn_max_timeout = 2;
     btn_max_turbo = 0;
   }
 
-  if (btn_min_status) {
-    if (btn_min_timeout == 0) {
-      if (btn_min_turbo >= 25) {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost -= 100000;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost -= 100000;
-        }
-      } else if (btn_min_turbo >= 20) {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost -= 10000;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost -= 10000;
-        }
-      } else if (btn_min_turbo >= 15) {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost -= 1000;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost -= 1000;
-        }
-      } else if (btn_min_turbo >= 10) {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost -= 100;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost -= 100;
-        }
-      } else if (btn_min_turbo >= 8) {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost -= 50;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost -= 50;
-        }
-      } else if (btn_min_turbo >= 5) {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost -= 10;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost -= 10;
-        }
-      } else {
-        if (flagaux_setpoint == 1) {
-          setpoint_boost--;
-        } else if (flagaux_setpoint == 2) {
-          setpoint_obrigatorio_boost--;
-        }
-      }
-      if (btn_min_turbo < 25) {
-        btn_min_turbo++;
-      }
-      if (btn_min_turbo >= 5) {
-        btn_min_timeout = TURBO_LEVEL2;
-      } else {
-        btn_min_timeout = TURBO_LEVEL1;
-      }
-    }
-  } else {
+  if (btn_min_status && btn_min_timeout == 0) {
+    if (btn_min_turbo >= 30)
+      setpoint_temp -= 100;
+    else if (btn_min_turbo >= 20)
+      setpoint_temp -= 20;
+    else if (btn_min_turbo >= 10)
+      setpoint_temp -= 10;
+    else
+      setpoint_temp -= 1;
+
+    if (setpoint_temp < 0)
+      setpoint_temp = 0;
+    if (modo == 1 && setpoint_temp > setpoint_obriga_inspecao)
+      setpoint_temp = setpoint_obriga_inspecao;
+    if (modo == 2 && setpoint_temp < setpoint_inspecao)
+      setpoint_temp = setpoint_inspecao;
+
+    if (btn_min_turbo < 30)
+      btn_min_turbo++;
+    btn_min_timeout = (btn_min_turbo >= 5) ? 4 : 7;
+    atualiza_display_timeout = 0;
+  } else if (!btn_min_status) {
+    btn_min_timeout = 2;
     btn_min_turbo = 0;
   }
 
-  btn_max_borda_anterior = btn_max_status;
-  btn_min_borda_anterior = btn_min_status;
-  btn_relogio_borda_anterior = btn_relogio_status;
+  atualiza_display_int32((uint32_t)setpoint_temp);
+  trata_tac_relogio_press();
 }
 
-static void salva_configs(void) {
-  static int32_t ultimo_salvo = -1;
+void ativa_alarme(void) {}
 
-  if ((contador_pecas % 10 == 0) && (contador_pecas != ultimo_salvo)) {
-    HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR0, contador_pecas);
-    ultimo_salvo = contador_pecas;
-  }
-  if (flagaux_setpoint == 1) {
-    // HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR0, setpoint);
-  } else if (flagaux_setpoint == 2) {
-    // HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, setpoint_obrigatorio);
-  }
+void btn_relogio_processado(void) {}
+
+static void prepara_dados_eeprom(void) {
+  dados.assinatura = EEPROM_ASSINATURA_APP;
+  dados.contador = contador;
+  dados.ultima_conferencia = ultima_conferencia;
+  dados.setpoint_01 = (uint32_t)setpoint_inspecao;
+  dados.setpoint_obrigatorio_01 = (uint32_t)setpoint_obriga_inspecao;
+}
+
+static void salva_dados_agendado(void) {
+  prepara_dados_eeprom();
+  eeprom_flagaux_salvar = 1;
+}
+
+static void salva_dados_imediato(void) {
+  prepara_dados_eeprom();
+  eeprom_write(&dados);
+  eeprom_process();
+  eeprom_flagaux_salvar = 0;
+}
+
+static void salva_presets_flash(void) {
+  prepara_dados_eeprom();
+  eeprom_write_presets((uint32_t)setpoint_inspecao,
+                       (uint32_t)setpoint_obriga_inspecao);
 }
 
 static void carrega_config(void) {
-  contador_pecas = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR0);
-  // setpoint = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR0);
-  // setpoint_obrigatorio = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1);
-
-  // setpoint_boost = setpoint;
-  // setpoint_obrigatorio_boost = setpoint_obrigatorio;
-
-  // eeprom_read(&dados);
   dados = eeprom_read();
 
-  // protecao para lixo
-  if (dados.setpoint_01 > 999999) {
-    dados.setpoint_01 = 0;
-  }
-  if (dados.setpoint_obrigatorio_01 > 999999) {
-    dados.setpoint_obrigatorio_01 = 0;
+  if (dados.assinatura != EEPROM_ASSINATURA_APP) {
+    dados.assinatura = EEPROM_ASSINATURA_APP;
+    dados.contador = 0;
+    dados.ultima_conferencia = 0;
+    dados.setpoint_01 = SETPOINT_DEFAULT;
+    dados.setpoint_obrigatorio_01 = SETPOINT_OBRIGA_DEFAULT;
+    eeprom_write_presets(dados.setpoint_01, dados.setpoint_obrigatorio_01);
   }
 
-  // joga para variaveis do sistema
-  setpoint = dados.setpoint_01;
-  setpoint_boost = setpoint;
+  if (dados.setpoint_01 == 0U && dados.setpoint_obrigatorio_01 == 0U) {
+    dados.setpoint_01 = SETPOINT_DEFAULT;
+    dados.setpoint_obrigatorio_01 = SETPOINT_OBRIGA_DEFAULT;
+    eeprom_write_presets(dados.setpoint_01, dados.setpoint_obrigatorio_01);
+  }
 
-  setpoint_obrigatorio = dados.setpoint_obrigatorio_01;
-  setpoint_obrigatorio_boost = setpoint_obrigatorio;
+  setpoint_inspecao = dados.setpoint_01;
+  if (setpoint_inspecao > (int32_t)VALOR_MAXIMO)
+    setpoint_inspecao = SETPOINT_DEFAULT;
+
+  setpoint_obriga_inspecao = dados.setpoint_obrigatorio_01;
+  if (setpoint_obriga_inspecao > (int32_t)VALOR_MAXIMO)
+    setpoint_obriga_inspecao = SETPOINT_OBRIGA_DEFAULT;
+
+  if (setpoint_inspecao > setpoint_obriga_inspecao) {
+    setpoint_inspecao = SETPOINT_DEFAULT;
+    setpoint_obriga_inspecao = SETPOINT_OBRIGA_DEFAULT;
+  }
+
+  contador = dados.contador;
+  if (contador > VALOR_MAXIMO)
+    contador = 0;
+
+  ultima_conferencia = dados.ultima_conferencia;
+  if (ultima_conferencia > VALOR_MAXIMO)
+    ultima_conferencia = 0;
+
+  ultima_contagem = contador;
+  atualiza_display_timeout = 0;
 }
 
+static void serial_init_rx(void) {
+  (void)USART1->DR;
+  USART1->CR1 |= USART_CR1_RXNEIE;
+}
+
+static void serial_send_text(const char *text) {
+  while (*text != '\0') {
+    uint32_t start = HAL_GetTick();
+    while ((USART1->SR & USART_SR_TXE) == 0) {
+      if ((HAL_GetTick() - start) > 20U) {
+        return;
+      }
+    }
+    USART1->DR = (uint8_t)*text++;
+  }
+}
+
+void serial_usart1_irq_handler(void) {
+  if ((USART1->SR & USART_SR_RXNE) != 0) {
+    uint8_t byte = (uint8_t)USART1->DR;
+    uint8_t next = (uint8_t)((serial_rx_head + 1U) % sizeof(serial_rx_buffer));
+    if (next != serial_rx_tail) {
+      serial_rx_buffer[serial_rx_head] = byte;
+      serial_rx_head = next;
+    }
+  }
+}
 /* USER CODE END 4 */
 
 /**
@@ -1041,6 +763,8 @@ static void carrega_config(void) {
 void Error_Handler(void) {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
+  HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01, LOW);
+  HAL_GPIO_WritePin(SAIDA_02_PORT, SAIDA_02, LOW);
   __disable_irq();
   while (1) {
   }

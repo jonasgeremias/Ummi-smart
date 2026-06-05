@@ -23,6 +23,7 @@ extern volatile uint8_t splash_digits[6];
 #define DSP_7 7
 #define DSP_8 8
 #define DSP_9 9
+#define DSP_O DSP_0
 #define DSP_A 10
 #define DSP_B 11
 #define DSP_C 12
@@ -43,8 +44,11 @@ extern volatile uint8_t splash_digits[6];
 #define DSP_U 27
 #define DSP_OFF 28
 #define DSP_MINUS 29
+#define DSP_K 30
 
 void display_scan(void);
 void display_atualiza(uint32_t valor);
+void display_set_decimal_points(uint8_t timeout_50ms, uint8_t digit_mask);
+void display_tick_50ms(void);
 
 #endif /* INC_DISPLAY_H_ */

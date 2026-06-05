@@ -20,6 +20,10 @@ static volatile uint8_t dezena_milhar = 0;
 static volatile uint8_t centena_milhar = 0;
 
 volatile uint8_t splash_digits[6] = {0};
+static volatile uint8_t decimal_point_timeout = 0;
+static volatile uint8_t decimal_point_mask = 0;
+
+#define TABELA_DISPLAY_SIZE (sizeof(tabela_display) / sizeof(tabela_display[0]))
 
 static const uint8_t tabela_display[] = {
     //  87654321
@@ -59,6 +63,7 @@ static const uint8_t tabela_display[] = {
 
 static void escreve_segmentos(uint8_t valor);
 static void desliga_displays(uint8_t d);
+static void desliga_todos_displays(void);
 
 static void escreve_segmentos(uint8_t valor) {
   HAL_GPIO_WritePin(SEG_A_GPIO_PORT, SEG_A_PIN,
@@ -88,16 +93,26 @@ void display_atualiza(uint32_t valor) {
   centena_milhar = (valor / 100000) % 10;
 }
 
+void display_set_decimal_points(uint8_t timeout_50ms, uint8_t digit_mask) {
+  decimal_point_timeout = timeout_50ms;
+  decimal_point_mask = digit_mask;
+}
+
+void display_tick_50ms(void) {
+  if (decimal_point_timeout > 0) {
+    decimal_point_timeout--;
+  }
+}
+
 void display_scan(void) {
   uint8_t byte_display;
-  uint8_t anterior;
-  uint8_t valor;
+  uint8_t valor = DSP_OFF;
 
-  anterior = display - 1;
-  if (display == 0)
-    anterior = 5;
+  if (display > 5) {
+    display = 0;
+  }
 
-  desliga_displays(anterior);
+  desliga_todos_displays();
 
   // 🔥 ESCOLHE ENTRE SPLASH OU DISPLAY NORMAL
   if (splash_timeout > 0) {
@@ -125,7 +140,14 @@ void display_scan(void) {
     }
   }
 
+  if (valor >= TABELA_DISPLAY_SIZE) {
+    valor = DSP_OFF;
+  }
+
   byte_display = tabela_display[valor];
+  if ((decimal_point_timeout > 0) && (decimal_point_mask & (1U << display))) {
+    byte_display |= 0x80;
+  }
   escreve_segmentos(byte_display);
 
   // liga display
@@ -155,6 +177,12 @@ void display_scan(void) {
   display++;
   if (display > 5)
     display = 0;
+}
+
+static void desliga_todos_displays(void) {
+  for (uint8_t i = 0; i < 6; i++) {
+    desliga_displays(i);
+  }
 }
 
 static void desliga_displays(uint8_t d) {

@@ -62,10 +62,12 @@ volatile uint8_t btn_relogio_evento = 0;
 volatile uint16_t entrada_digital_contador = 0;
 volatile uint8_t entrada_digital_status = 0;
 volatile uint8_t entrada_digital_borda_anterior = 0;
+volatile uint16_t entrada_digital_pulsos_pendentes = 0;
 
 volatile uint8_t entrada_digital_02_contador = 0;
 volatile uint8_t entrada_digital_02_status = 0;
 volatile uint8_t entrada_digital_02_borda_anterior = 0;
+volatile uint8_t entrada_digital_02_evento_pendente = 0;
 
 // outras variaveis
 
@@ -140,27 +142,25 @@ static void tmr_3ms(void) {
   timer_flag_3ms = 1;
   debounce_btns();
   debounce_entradas_digitais();
-  btn_relogio_processado();
 }
 static void tmr_5ms(void) { timer_flag_5ms = 1; }
 static void tmr_10ms(void) {
   timer_flag_10ms = 1;
-  if (splash_timeout > 0){
-    splash_timeout--;
-  }
 }
 static void tmr_50ms(void) {
   timer_flag_50ms = 1;
+  if (splash_timeout > 0)
+    splash_timeout--;
   if (btn_max_timeout > 0)
     btn_max_timeout--;
   if (btn_min_timeout > 0)
     btn_min_timeout--;
+  display_tick_50ms();
 }
 static void tmr_100ms(void) { timer_flag_100ms = 1; }
 static void tmr_500ms(void) { timer_flag_500ms = 1; }
 static void tmr_1000ms(void) {
   timer_flag_1000ms = 1; 
-  ativa_alarme();
 }
 
 static void debounce_btns(void) {
@@ -196,8 +196,8 @@ static void debounce_btns(void) {
 }
 
 static void debounce_entradas_digitais(void) {
-  if (HAL_GPIO_ReadPin(INPUT_01_PORT, INPUT_01) == HIGH) {
-    if (entrada_digital_contador < 3)
+  if (HAL_GPIO_ReadPin(INPUT_01_PORT, INPUT_01) == INPUT_01_ACTIVE_LEVEL) {
+    if (entrada_digital_contador < INPUT_DEBOUNCE_TICKS)
       entrada_digital_contador++;
     else
       entrada_digital_status = 1;
@@ -206,8 +206,15 @@ static void debounce_entradas_digitais(void) {
     entrada_digital_status = 0;
   }
 
-  if (HAL_GPIO_ReadPin(INPUT_02_PORT, INPUT_02) == HIGH) {
-    if (entrada_digital_02_contador < 3)
+  if (entrada_digital_status && !entrada_digital_borda_anterior) {
+    if (entrada_digital_pulsos_pendentes < 65535U) {
+      entrada_digital_pulsos_pendentes++;
+    }
+  }
+  entrada_digital_borda_anterior = entrada_digital_status;
+
+  if (HAL_GPIO_ReadPin(INPUT_02_PORT, INPUT_02) == INPUT_02_ACTIVE_LEVEL) {
+    if (entrada_digital_02_contador < INPUT_DEBOUNCE_TICKS)
       entrada_digital_02_contador++;
     else
       entrada_digital_02_status = 1;
@@ -215,6 +222,11 @@ static void debounce_entradas_digitais(void) {
     entrada_digital_02_contador = 0;
     entrada_digital_02_status = 0;
   }
+
+  if (entrada_digital_02_status && !entrada_digital_02_borda_anterior) {
+    entrada_digital_02_evento_pendente = 1;
+  }
+  entrada_digital_02_borda_anterior = entrada_digital_02_status;
 
 }
 
