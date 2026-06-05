@@ -1,5 +1,0 @@
-../Core/Src/eeprom.c:27:6:eeprom_init	1
-../Core/Src/eeprom.c:32:15:eeprom_read	3
-../Core/Src/eeprom.c:50:6:eeprom_write	2
-../Core/Src/eeprom.c:59:6:eeprom_is_pending	1
-../Core/Src/eeprom.c:61:6:eeprom_process	7

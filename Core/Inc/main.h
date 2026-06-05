@@ -53,19 +53,8 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-void modo_operacao(void);
-void modo_setpoint(void);
-void modo_setpoint_obrigatorio(void);
-void contagem(void);
-
-void btn_relogio_processado();
-// void btn_max_processado();
-// void btn_min_processado();
-void le_botoes();
-void splash_screen(uint16_t tempo_ms, uint8_t d5, uint8_t d4, uint8_t d3, uint8_t d2, uint8_t d1, uint8_t d0);
-
-void salva_configs();
-void carrega_config();
+void ativa_alarme(void);
+void btn_relogio_processado(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

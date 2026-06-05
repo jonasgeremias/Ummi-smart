@@ -93,6 +93,15 @@ static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_RTC_Init(void);
 /* USER CODE BEGIN PFP */
+static void splash_screen(uint16_t tempo_ms, uint8_t d5, uint8_t d4,
+                          uint8_t d3, uint8_t d2, uint8_t d1, uint8_t d0);
+static void modo_operacao(void);
+static void modo_setpoint(void);
+static void modo_setpoint_obrigatorio(void);
+static void contagem(void);
+static void le_botoes(void);
+static void salva_configs(void);
+static void carrega_config(void);
 
 /* USER CODE END PFP */
 
@@ -134,7 +143,11 @@ int main(void) {
   MX_I2C1_Init();
   MX_RTC_Init();
   /* USER CODE BEGIN 2 */
-  splash_screen(200, 11, 14, 1, 0, 0, 1);
+  
+  
+  splash_screen(500, DSP_B, DSP_E, DSP_I, 0, 0, 2);
+  
+  
   eeprom_init();
   // dados = eeprom_read();
   carrega_config();
@@ -376,8 +389,8 @@ static void MX_GPIO_Init(void) {
 
 /* USER CODE BEGIN 4 */
 
-void splash_screen(uint16_t tempo_ms, uint8_t d5, uint8_t d4, uint8_t d3,
-                   uint8_t d2, uint8_t d1, uint8_t d0) {
+static void splash_screen(uint16_t tempo_ms, uint8_t d5, uint8_t d4,
+                          uint8_t d3, uint8_t d2, uint8_t d1, uint8_t d0) {
   splash_timeout = tempo_ms;
   splash_digits[0] = d0;
   splash_digits[1] = d1;
@@ -387,7 +400,7 @@ void splash_screen(uint16_t tempo_ms, uint8_t d5, uint8_t d4, uint8_t d3,
   splash_digits[5] = d5;
 }
 
-void modo_operacao() {
+static void modo_operacao(void) {
 
   switch (btn_relogio_evento) {
   case 1:
@@ -466,7 +479,7 @@ void modo_operacao() {
 //   }
 // }
 
-void contagem() {
+static void contagem(void) {
   static uint8_t trava = 0;
 
   if (contador_pecas > 999999) {
@@ -532,13 +545,13 @@ void contagem() {
     salva_configs();
   }
 }
-void ativa_alarme(){
-
+void ativa_alarme(void) {
   if (inspecao_obrigatoria == 1) {
     HAL_GPIO_TogglePin(SAIDA_01_PORT, SAIDA_01);
   }
 }
-void modo_setpoint() {
+
+static void modo_setpoint(void) {
   static uint32_t setpoint_guardado = 0;
 
   setpoint = setpoint_boost;
@@ -562,7 +575,7 @@ void modo_setpoint() {
   //  Implementar lógica para modo de configuração do setpoint
 }
 
-void modo_setpoint_obrigatorio() {
+static void modo_setpoint_obrigatorio(void) {
   static uint32_t ultimo_valor = 0;
   static uint32_t tempo_ultima_mudanca = 0;
 
@@ -814,7 +827,7 @@ void btn_relogio_processado(void) {
 //   btn_relogio_borda_anterior = btn_relogio_status;
 // }
 
-void le_botoes() {
+static void le_botoes(void) {
   static uint8_t max_press = 0;
   static uint8_t min_press = 0;
 
@@ -978,7 +991,7 @@ void le_botoes() {
   btn_relogio_borda_anterior = btn_relogio_status;
 }
 
-void salva_configs() {
+static void salva_configs(void) {
   static int32_t ultimo_salvo = -1;
 
   if ((contador_pecas % 10 == 0) && (contador_pecas != ultimo_salvo)) {
@@ -992,7 +1005,7 @@ void salva_configs() {
   }
 }
 
-void carrega_config() {
+static void carrega_config(void) {
   contador_pecas = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR0);
   // setpoint = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR0);
   // setpoint_obrigatorio = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1);

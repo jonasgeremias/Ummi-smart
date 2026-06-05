@@ -10,6 +10,8 @@
 
 #include "stm32f4xx_hal.h"
 
+extern I2C_HandleTypeDef hi2c1;
+
 //configuração do endereço do dispositivo
 #define EEPROM_I2C hi2c1
 #define EEPROM_ADDRESS (0x50 << 1) // A0, A1, A2 = GND
@@ -39,16 +41,10 @@ void ee_read_data(uint16_t mem_address, void *ptr, uint16_t size);
 void ee_clear_page(uint16_t page_address);
 void ee_erase_all(void);
 
-void ee_write_int16(uint16_t addr, int16_t data);
-int16_t ee_read_int16(uint16_t addr);
-
-void ee_write_int32(uint16_t addr, int32_t data);
-int32_t ee_read_int32(uint16_t addr);
-
 uint32_t ee_read_int32_redundant(uint16_t addr);
 void ee_write_int32_redundant(uint16_t addr, uint32_t value);
+void ee_write_int32_safe(uint16_t addr, uint32_t value);
 
-uint8_t ee_check_signature(void);
-
+uint8_t ee_read_int8_redundant(uint16_t addr);
 
 #endif /* INC_24X256_H_ */

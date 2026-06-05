@@ -8,21 +8,20 @@
 #include "defines.h"
 #include "main.h"
 #include "stm32f4xx_hal.h"
+#include "timer.h"
 #include <stdint.h>
 
+static volatile uint8_t display = 0;
+static volatile uint8_t unidade = 0;
+static volatile uint8_t dezena = 0;
+static volatile uint8_t centena = 0;
+static volatile uint8_t milhar = 0;
+static volatile uint8_t dezena_milhar = 0;
+static volatile uint8_t centena_milhar = 0;
 
-uint8_t display = 0;
-uint8_t unidade = 0;
-uint8_t dezena = 0;
-uint8_t centena = 0;
-uint8_t milhar = 0;
-uint8_t dezena_milhar = 0;
-uint8_t centena_milhar = 0;
+volatile uint8_t splash_digits[6] = {0};
 
-//volatile uint16_t splash_timeout = 0;
-volatile uint8_t splash_digits[6];
-
-const uint8_t tabela_display[] = {
+static const uint8_t tabela_display[] = {
     //  87654321
     0b00111111, //  0
     0b00000110, //  1
@@ -42,7 +41,7 @@ const uint8_t tabela_display[] = {
     0b01110001, // 15 = F
     0b01111101, // 16 = G
     0b01110110, // 17 = H
-    0b00000100, // 18 = I
+    0b00000110, // 18 = I
     0b00011110, // 19 = J
     0b00111000, // 20 = L
     0b01010100, // 21 = N
@@ -58,7 +57,10 @@ const uint8_t tabela_display[] = {
     0b00011100  // 31 = U
 };
 
-void escreve_segmentos(uint8_t valor) {
+static void escreve_segmentos(uint8_t valor);
+static void desliga_displays(uint8_t d);
+
+static void escreve_segmentos(uint8_t valor) {
   HAL_GPIO_WritePin(SEG_A_GPIO_PORT, SEG_A_PIN,
                     (valor & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
   HAL_GPIO_WritePin(SEG_B_GPIO_PORT, SEG_B_PIN,
@@ -86,61 +88,7 @@ void display_atualiza(uint32_t valor) {
   centena_milhar = (valor / 100000) % 10;
 }
 
-// void display_scan() {
-//   uint8_t byte_display;
-//   uint8_t anterior;
-
-//   anterior = display - 1;
-//   if (display == 0)
-//     anterior = 5;
-
-//   desliga_displays(anterior);
-
-//   switch (display) {
-//   case 0:
-//     byte_display = tabela_display[unidade];
-//     escreve_segmentos(byte_display);
-//     HAL_GPIO_WritePin(DISPLAY_UNIDADE_PORT, DISPLAY_UNIDADE, HIGH);
-//     break;
-
-//   case 1:
-//     byte_display = tabela_display[dezena];
-//     escreve_segmentos(byte_display);
-//     HAL_GPIO_WritePin(DISPLAY_DEZENA_PORT, DISPLAY_DEZENA, HIGH);
-//     break;
-
-//   case 2:
-//     byte_display = tabela_display[centena];
-//     escreve_segmentos(byte_display);
-//     HAL_GPIO_WritePin(DISPLAY_CENTENA_PORT, DISPLAY_CENTENA, HIGH);
-//     break;
-
-//   case 3:
-//     byte_display = tabela_display[milhar];
-//     escreve_segmentos(byte_display);
-//     HAL_GPIO_WritePin(DISPLAY_MILHAR_UNIDADE_PORT, DISPLAY_MILHAR_UNIDADE,
-//     HIGH); break;
-
-//   case 4:
-//     byte_display = tabela_display[dezena_milhar];
-//     escreve_segmentos(byte_display);
-//     HAL_GPIO_WritePin(DISPLAY_MILHAR_DEZENA_PORT, DISPLAY_MILHAR_DEZENA,
-//     HIGH); break;
-
-//   case 5:
-//     byte_display = tabela_display[centena_milhar];
-//     escreve_segmentos(byte_display);
-//     HAL_GPIO_WritePin(DISPLAY_MILHAR_CENTENA_PORT, DISPLAY_MILHAR_CENTENA,
-//     HIGH); break;
-//   }
-
-//   display++;
-
-//   if (display > 5)
-//     display = 0;
-// }
-
-void display_scan() {
+void display_scan(void) {
   uint8_t byte_display;
   uint8_t anterior;
   uint8_t valor;
@@ -209,7 +157,7 @@ void display_scan() {
     display = 0;
 }
 
-void desliga_displays(uint8_t d) {
+static void desliga_displays(uint8_t d) {
   switch (d) {
   case 0:
     HAL_GPIO_WritePin(DISPLAY_UNIDADE_PORT, DISPLAY_UNIDADE, LOW);

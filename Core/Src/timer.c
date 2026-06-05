@@ -6,6 +6,7 @@
  */
 
 #include "timer.h"
+#include "display.h"
 #include "main.h"
 #include "stm32f4xx_hal.h"
 #include <stdbool.h>
@@ -68,6 +69,17 @@ volatile uint8_t entrada_digital_02_borda_anterior = 0;
 
 // outras variaveis
 
+static void tmr_1ms(void);
+static void tmr_3ms(void);
+static void tmr_5ms(void);
+static void tmr_10ms(void);
+static void tmr_50ms(void);
+static void tmr_100ms(void);
+static void tmr_500ms(void);
+static void tmr_1000ms(void);
+static void debounce_btns(void);
+static void debounce_entradas_digitais(void);
+
 void mainIsr(void) {
 
   // 1 ms - Timer base para serial
@@ -119,39 +131,39 @@ void mainIsr(void) {
   }
 }
 
-void tmr_1ms() { 
+static void tmr_1ms(void) {
   timer_flag_1ms = 1; 
   display_scan();
 }
 
-void tmr_3ms() {
+static void tmr_3ms(void) {
   timer_flag_3ms = 1;
   debounce_btns();
   debounce_entradas_digitais();
   btn_relogio_processado();
 }
-void tmr_5ms() { timer_flag_5ms = 1; }
-void tmr_10ms() { 
+static void tmr_5ms(void) { timer_flag_5ms = 1; }
+static void tmr_10ms(void) {
   timer_flag_10ms = 1;
   if (splash_timeout > 0){
     splash_timeout--;
   }
 }
-void tmr_50ms() {
+static void tmr_50ms(void) {
   timer_flag_50ms = 1;
   if (btn_max_timeout > 0)
     btn_max_timeout--;
   if (btn_min_timeout > 0)
     btn_min_timeout--;
 }
-void tmr_100ms() { timer_flag_100ms = 1; }
-void tmr_500ms() { timer_flag_500ms = 1; }
-void tmr_1000ms() { 
+static void tmr_100ms(void) { timer_flag_100ms = 1; }
+static void tmr_500ms(void) { timer_flag_500ms = 1; }
+static void tmr_1000ms(void) {
   timer_flag_1000ms = 1; 
   ativa_alarme();
 }
 
-void debounce_btns() {
+static void debounce_btns(void) {
   if (HAL_GPIO_ReadPin(BOTAO_RELOGIO_PORT, BOTAO_RELOGIO) == LOW) {
     if (btn_relogio_contador < 5)
       btn_relogio_contador++;
@@ -183,7 +195,7 @@ void debounce_btns() {
   }
 }
 
-void debounce_entradas_digitais() {
+static void debounce_entradas_digitais(void) {
   if (HAL_GPIO_ReadPin(INPUT_01_PORT, INPUT_01) == HIGH) {
     if (entrada_digital_contador < 3)
       entrada_digital_contador++;
