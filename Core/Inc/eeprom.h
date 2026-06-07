@@ -17,6 +17,12 @@ typedef struct{
    uint32_t ultima_conferencia;
    uint32_t setpoint_01;
    uint32_t setpoint_obrigatorio_01;
+   uint32_t histerese_temperatura_dC;
+   uint32_t limite_temperatura_alta_dC;
+   uint32_t limite_temperatura_baixa_dC;
+   uint32_t zur_umidade;
+   uint32_t gur_umidade;
+   uint32_t datalog_periodo_s;
 } eeprom_data_t;
 
 extern eeprom_data_t dados;
@@ -28,6 +34,7 @@ eeprom_data_t eeprom_read(void); // le o valor da virtual eeprom
 //void eeprom_write(uint32_t data); // escreve o valor na virtual eeprom
 void eeprom_write(eeprom_data_t *data);
 void eeprom_write_presets(uint32_t setpoint_01, uint32_t setpoint_obrigatorio_01);
+void eeprom_write_config(const eeprom_data_t *data);
 void eeprom_process(void); // processa a escrita na virtual eeprom
 bool eeprom_is_pending(void); // retorna se houve uma escrita na virtual eeprom
 

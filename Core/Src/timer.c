@@ -165,7 +165,7 @@ static void tmr_1000ms(void) {
 
 static void debounce_btns(void) {
   if (HAL_GPIO_ReadPin(BOTAO_RELOGIO_PORT, BOTAO_RELOGIO) == LOW) {
-    if (btn_relogio_contador < 5)
+    if (btn_relogio_contador < 2)
       btn_relogio_contador++;
     else
       btn_relogio_status = 1;
@@ -175,7 +175,7 @@ static void debounce_btns(void) {
   }
 
   if (HAL_GPIO_ReadPin(BOTAO_MIN_PORT, BOTAO_MIN) == LOW) {
-    if (btn_min_contador < 5)
+    if (btn_min_contador < 2)
       btn_min_contador++;
     else
       btn_min_status = 1;
@@ -185,7 +185,7 @@ static void debounce_btns(void) {
   }
 
   if (HAL_GPIO_ReadPin(BOTAO_MAX_PORT, BOTAO_MAX) == LOW) {
-    if (btn_max_contador < 5)
+    if (btn_max_contador < 2)
       btn_max_contador++;
     else
       btn_max_status = 1;

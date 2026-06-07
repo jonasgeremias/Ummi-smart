@@ -1,4 +1,4 @@
-# CBS_01 - Contador de Pecas STM32
+# Ummi-smart
 
 Aplicacao para STM32F410RBTx que reproduz a logica do contador de pecas da JIGA UMMI. O sistema conta pulsos de sensor, controla os pontos de inspecao e inspecao obrigatoria, mostra os valores em display de 6 digitos de 7 segmentos e salva as configuracoes em memoria persistente.
 
@@ -33,7 +33,7 @@ Na inicializacao, o firmware:
 1. Inicializa GPIO, I2C, RTC e USART1.
 2. Le a configuracao salva na EEPROM.
 3. Se nao houver dados validos, usa valores padrao:
-   - Inspecao: `100`.
+   - Inspecao: `100`.0   hhn jmmmmmmmmmmmmmmmmmmm
    - Inspecao obrigatoria: `200`.
    - Contador: `0`.
    - Ultima conferencia: `0`.
@@ -159,8 +159,8 @@ Frequency: 100 kHz
 
 O projeto possui:
 
-- `CBS_01-Contador_de_Pecas.cfg`
-- `CBS_01-Contador_de_Pecas.launch`
+- `Ummi-smart.cfg`
+- `Ummi-smart.launch`
 
 Ambos foram ajustados para SWD em `100 kHz`.
 

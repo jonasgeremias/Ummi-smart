@@ -59,12 +59,24 @@ void serial_usart1_irq_handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define LED_STATUS4_Pin GPIO_PIN_13
+#define LED_STATUS4_GPIO_Port GPIOC
+#define EA_12V_Pin GPIO_PIN_0
+#define EA_12V_GPIO_Port GPIOC
 #define PC1_PIN_INPUT_MEMBRANA_01_Pin GPIO_PIN_1
 #define PC1_PIN_INPUT_MEMBRANA_01_GPIO_Port GPIOC
 #define PC2_PIN_INPUT_MEMBRANA_02_Pin GPIO_PIN_2
 #define PC2_PIN_INPUT_MEMBRANA_02_GPIO_Port GPIOC
 #define PC3_PIN_INPUT_MEMBRANA_03_Pin GPIO_PIN_3
 #define PC3_PIN_INPUT_MEMBRANA_03_GPIO_Port GPIOC
+#define EA_UMIDADE_Pin GPIO_PIN_1
+#define EA_UMIDADE_GPIO_Port GPIOA
+#define EA_TEMPERATURA_Pin GPIO_PIN_2
+#define EA_TEMPERATURA_GPIO_Port GPIOA
+#define EA_TEMP_REF_GND_Pin GPIO_PIN_3
+#define EA_TEMP_REF_GND_GPIO_Port GPIOA
+#define EA_5V_Pin GPIO_PIN_4
+#define EA_5V_GPIO_Port GPIOA
 #define PA5_PIN_DISPLAY_A_Pin GPIO_PIN_5
 #define PA5_PIN_DISPLAY_A_GPIO_Port GPIOA
 #define PA6_PIN_DISPLAY_B_Pin GPIO_PIN_6
@@ -97,6 +109,14 @@ void serial_usart1_irq_handler(void);
 #define PC7_PIN_SAIDA_DIGITAL1_GPIO_Port GPIOC
 #define PC9_PIN_SAIDA_DIGITAL2_Pin GPIO_PIN_9
 #define PC9_PIN_SAIDA_DIGITAL2_GPIO_Port GPIOC
+#define LED_STATUS1_Pin GPIO_PIN_10
+#define LED_STATUS1_GPIO_Port GPIOC
+#define LED_STATUS2_Pin GPIO_PIN_11
+#define LED_STATUS2_GPIO_Port GPIOC
+#define LED_STATUS3_Pin GPIO_PIN_12
+#define LED_STATUS3_GPIO_Port GPIOC
+#define SD_BUZZER_Pin GPIO_PIN_5
+#define SD_BUZZER_GPIO_Port GPIOB
 #define PB6_PIN_I2C1_SCL_Pin GPIO_PIN_6
 #define PB6_PIN_I2C1_SCL_GPIO_Port GPIOB
 #define PB7_PIN_I2C1_SDA_Pin GPIO_PIN_7

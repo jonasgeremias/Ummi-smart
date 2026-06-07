@@ -41,6 +41,12 @@ typedef struct {
   uint32_t sequencia;
   uint32_t setpoint_01;
   uint32_t setpoint_obrigatorio_01;
+  uint32_t histerese_temperatura_dC;
+  uint32_t limite_temperatura_alta_dC;
+  uint32_t limite_temperatura_baixa_dC;
+  uint32_t zur_umidade;
+  uint32_t gur_umidade;
+  uint32_t datalog_periodo_s;
   uint32_t checksum;
 } preset_record_t;
 
@@ -68,8 +74,7 @@ static bool count_record_is_valid(const count_record_t *record);
 static uint32_t preset_checksum(const preset_record_t *record);
 static bool preset_record_is_valid(const preset_record_t *record);
 static bool flash_read_latest_presets(eeprom_data_t *data);
-static bool flash_write_presets_record(uint32_t setpoint_01,
-                                       uint32_t setpoint_obrigatorio_01);
+static bool flash_write_config_record(const eeprom_data_t *data);
 
 void eeprom_init(void) {
   ext_eeprom_available = ext_wait_ready(EXT_EEPROM_TIMEOUT_MS);
@@ -109,10 +114,23 @@ void eeprom_write(eeprom_data_t *data) {
 
 void eeprom_write_presets(uint32_t setpoint_01,
                           uint32_t setpoint_obrigatorio_01) {
-  if (flash_write_presets_record(setpoint_01, setpoint_obrigatorio_01)) {
+  eeprom_data_t config = dados;
+  config.assinatura = EEPROM_ASSINATURA;
+  config.setpoint_01 = setpoint_01;
+  config.setpoint_obrigatorio_01 = setpoint_obrigatorio_01;
+  eeprom_write_config(&config);
+}
+
+void eeprom_write_config(const eeprom_data_t *data) {
+  if (flash_write_config_record(data)) {
     dados.assinatura = EEPROM_ASSINATURA;
-    dados.setpoint_01 = setpoint_01;
-    dados.setpoint_obrigatorio_01 = setpoint_obrigatorio_01;
+    dados.setpoint_01 = data->setpoint_01;
+    dados.setpoint_obrigatorio_01 = data->setpoint_obrigatorio_01;
+    dados.histerese_temperatura_dC = data->histerese_temperatura_dC;
+    dados.limite_temperatura_alta_dC = data->limite_temperatura_alta_dC;
+    dados.limite_temperatura_baixa_dC = data->limite_temperatura_baixa_dC;
+    dados.zur_umidade = data->zur_umidade;
+    dados.gur_umidade = data->gur_umidade;
   }
 }
 
@@ -284,18 +302,29 @@ static bool flash_read_latest_presets(eeprom_data_t *data) {
   data->assinatura = EEPROM_ASSINATURA;
   data->setpoint_01 = best.setpoint_01;
   data->setpoint_obrigatorio_01 = best.setpoint_obrigatorio_01;
+  data->histerese_temperatura_dC = best.histerese_temperatura_dC;
+  data->limite_temperatura_alta_dC = best.limite_temperatura_alta_dC;
+  data->limite_temperatura_baixa_dC = best.limite_temperatura_baixa_dC;
+  data->zur_umidade = best.zur_umidade;
+  data->gur_umidade = best.gur_umidade;
+  data->datalog_periodo_s = best.datalog_periodo_s;
   flash_next_sequence = best.sequencia + 1U;
   return true;
 }
 
-static bool flash_write_presets_record(uint32_t setpoint_01,
-                                       uint32_t setpoint_obrigatorio_01) {
+static bool flash_write_config_record(const eeprom_data_t *data) {
   uint32_t addr = FLASH_PRESET_START_ADDR;
   preset_record_t record = {
       .assinatura = EEPROM_ASSINATURA,
       .sequencia = flash_next_sequence,
-      .setpoint_01 = setpoint_01,
-      .setpoint_obrigatorio_01 = setpoint_obrigatorio_01,
+      .setpoint_01 = data->setpoint_01,
+      .setpoint_obrigatorio_01 = data->setpoint_obrigatorio_01,
+      .histerese_temperatura_dC = data->histerese_temperatura_dC,
+      .limite_temperatura_alta_dC = data->limite_temperatura_alta_dC,
+      .limite_temperatura_baixa_dC = data->limite_temperatura_baixa_dC,
+      .zur_umidade = data->zur_umidade,
+      .gur_umidade = data->gur_umidade,
+      .datalog_periodo_s = data->datalog_periodo_s,
       .checksum = 0,
   };
   record.checksum = preset_checksum(&record);
@@ -369,7 +398,13 @@ static bool count_record_is_valid(const count_record_t *record) {
 static uint32_t preset_checksum(const preset_record_t *record) {
   return checksum_bytes(&record->sequencia,
                         sizeof(record->sequencia) + sizeof(record->setpoint_01) +
-                            sizeof(record->setpoint_obrigatorio_01));
+                            sizeof(record->setpoint_obrigatorio_01) +
+                            sizeof(record->histerese_temperatura_dC) +
+                            sizeof(record->limite_temperatura_alta_dC) +
+                            sizeof(record->limite_temperatura_baixa_dC) +
+                            sizeof(record->zur_umidade) +
+                            sizeof(record->gur_umidade) +
+                            sizeof(record->datalog_periodo_s));
 }
 
 static bool preset_record_is_valid(const preset_record_t *record) {

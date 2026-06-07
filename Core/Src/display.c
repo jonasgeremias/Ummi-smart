@@ -58,7 +58,8 @@ static const uint8_t tabela_display[] = {
     0b00000000, // 28 = desligado
     0b01000000, // 29 = "-"
     0b00111111, // 30 = k
-    0b00011100  // 31 = U
+    0b00011100, // 31 = U
+    0b01011011  // 32 = Z
 };
 
 static void escreve_segmentos(uint8_t valor);
@@ -91,6 +92,16 @@ void display_atualiza(uint32_t valor) {
   milhar = (valor / 1000) % 10;
   dezena_milhar = (valor / 10000) % 10;
   centena_milhar = (valor / 100000) % 10;
+}
+
+void display_set_digits(uint8_t d5, uint8_t d4, uint8_t d3, uint8_t d2,
+                        uint8_t d1, uint8_t d0) {
+  centena_milhar = d5;
+  dezena_milhar = d4;
+  milhar = d3;
+  centena = d2;
+  dezena = d1;
+  unidade = d0;
 }
 
 void display_set_decimal_points(uint8_t timeout_50ms, uint8_t digit_mask) {
