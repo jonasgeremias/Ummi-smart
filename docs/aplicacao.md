@@ -364,6 +364,21 @@ Erros devem responder com comando de NACK (`7F`) e codigo de erro.
 | `89` | App -> host | RTC atual | `YYYY-MM-DD,hh:mm:ss` |
 | `7F` | App -> host | NACK | codigo de erro |
 
+Implementacao inicial aceita comandos terminados por `\r` ou `\n`. Alem dos pacotes com `CMD`, tambem aceita aliases ASCII para teste em terminal Bluetooth:
+
+Pacotes completos iniciados por `STX` ja sao validados com `CMD`, `TAM` e `CRC16`. Em erro de tamanho responde `7F,E02`; em erro de CRC responde `7F,E01`.
+
+- `02` ou `RT`: retorna tempo real em `82`.
+- `01` ou `ID`: retorna identificacao em `01`.
+- `03` ou `CFG?`: retorna configuracao em `83`.
+- `04 SP=valor`, `04 HIS=valor`, `04 ALT=valor`, `04 BAI=valor`, `04 ZUR=valor`, `04 GUR=valor`, `04 PER=valor`: grava configuracao e responde `84`.
+- Tambem aceita lista no mesmo comando: `04 SP=450,HIS=10,ALT=700,BAI=250,ZUR=6950,GUR=314,PER=60`.
+- `05` ou `LOG?`: retorna status do logger em `85`.
+- `06 indice,quantidade` ou `LOG indice,quantidade`: inicia envio assincrono de registros em pacotes `86`. Se a quantidade for omitida, envia 1 registro.
+- `07 CONFIRMA` ou `LOGRST`: reseta o logger e responde `87`.
+- `08 YYYY-MM-DD,hh:mm:ss`: ajusta RTC e responde `88`.
+- `09` ou `RTC?`: retorna RTC em `89`.
+
 ### Leitura Assincrona Do Datalogger
 
 Fluxo:

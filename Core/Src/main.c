@@ -29,6 +29,8 @@
 #include <display.h>
 #include <eeprom.h>
 #include <timer.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* USER CODE END Includes */
@@ -102,7 +104,7 @@ static const uint16_t DATALOG_PERIODO_DEFAULT_s = 60U;
 static const uint16_t DATALOG_BASE_ADDR = 0x0200U;
 static const uint16_t DATALOG_RECORDS_ADDR = 0x0240U;
 static const uint32_t DATALOG_ASSINATURA = 0x554D4C47U;
-static const uint16_t DATALOG_VERSAO = 2U;
+static const uint16_t DATALOG_VERSAO = 1U;
 static const uint8_t EXT_EEPROM_ADDR = (0x50U << 1);
 static const uint16_t EXT_EEPROM_PAGE_SIZE = 64U;
 static const uint16_t EXT_EEPROM_TIMEOUT_MS = 20U;
@@ -171,9 +173,14 @@ static datalog_header_t datalog_header = {0};
 static uint32_t eeprom_timer = 0;
 uint8_t eeprom_flagaux_salvar = 0;
 
-static volatile uint8_t serial_rx_buffer[64];
+static volatile uint8_t serial_rx_buffer[128];
 static volatile uint8_t serial_rx_head = 0;
 static volatile uint8_t serial_rx_tail = 0;
+static char serial_cmd_buffer[128];
+static uint8_t serial_cmd_len = 0;
+static uint8_t serial_log_enviando = 0;
+static uint16_t serial_log_indice = 0;
+static uint16_t serial_log_restante = 0;
 // uint32_t setpoint = 100;
 
 // Variáveis para controle do modo
@@ -243,6 +250,18 @@ static void salva_presets_flash(void);
 static void carrega_config(void);
 static void serial_init_rx(void);
 static void serial_send_text(const char *text);
+static void serial_process(void);
+static void serial_handle_command(const char *cmd);
+static void serial_send_packet(uint8_t cmd, const char *payload);
+static uint8_t serial_apply_config_list(const char *payload);
+static void serial_log_start(uint16_t indice, uint16_t quantidade);
+static void serial_log_process(void);
+static uint8_t serial_log_send_record(uint16_t indice);
+static uint16_t crc16_ibm(const uint8_t *data, uint16_t len);
+static int8_t serial_hex_nibble(char c);
+static uint8_t serial_parse_hex_u8(const char *text, uint8_t *value);
+static uint8_t serial_parse_hex_u16(const char *text, uint16_t *value);
+static uint16_t serial_get_datalog_total(void);
 
 /* USER CODE END PFP */
 
@@ -319,6 +338,8 @@ int main(void)
       timer_flag_1000ms = 0;
       datalog_tick_1s();
     }
+    serial_process();
+    serial_log_process();
 
     if (modo == 0) {
       modo_secagem();
@@ -1403,7 +1424,7 @@ static void modo_menu_checkpoint(void) {
       sair_pendente = 1;
       if (!splash_sair_mostrada) {
         splash_sair_mostrada = 1;
-        splash_screen(20, DSP_S, DSP_A, DSP_I, DSP_R, DSP_OFF, DSP_OFF);
+        splash_screen(20, DSP_MINUS, DSP_S, DSP_A, DSP_I, DSP_R, DSP_MINUS);
       }
       return;
     }
@@ -1849,6 +1870,411 @@ static void serial_send_text(const char *text) {
       }
     }
     USART1->DR = (uint8_t)*text++;
+  }
+}
+
+static uint16_t crc16_ibm(const uint8_t *data, uint16_t len) {
+  uint16_t crc = 0xFFFFU;
+
+  for (uint16_t i = 0; i < len; i++) {
+    crc ^= data[i];
+    for (uint8_t bit = 0; bit < 8U; bit++) {
+      if (crc & 1U) {
+        crc = (uint16_t)((crc >> 1U) ^ 0xA001U);
+      } else {
+        crc >>= 1U;
+      }
+    }
+  }
+
+  return crc;
+}
+
+static int8_t serial_hex_nibble(char c) {
+  if (c >= '0' && c <= '9') {
+    return (int8_t)(c - '0');
+  }
+  if (c >= 'A' && c <= 'F') {
+    return (int8_t)(c - 'A' + 10);
+  }
+  if (c >= 'a' && c <= 'f') {
+    return (int8_t)(c - 'a' + 10);
+  }
+  return -1;
+}
+
+static uint8_t serial_parse_hex_u8(const char *text, uint8_t *value) {
+  int8_t hi = serial_hex_nibble(text[0]);
+  int8_t lo = serial_hex_nibble(text[1]);
+
+  if (hi < 0 || lo < 0) {
+    return 0;
+  }
+  *value = (uint8_t)(((uint8_t)hi << 4U) | (uint8_t)lo);
+  return 1;
+}
+
+static uint8_t serial_parse_hex_u16(const char *text, uint16_t *value) {
+  int8_t n0 = serial_hex_nibble(text[0]);
+  int8_t n1 = serial_hex_nibble(text[1]);
+  int8_t n2 = serial_hex_nibble(text[2]);
+  int8_t n3 = serial_hex_nibble(text[3]);
+
+  if (n0 < 0 || n1 < 0 || n2 < 0 || n3 < 0) {
+    return 0;
+  }
+  *value = (uint16_t)(((uint16_t)n0 << 12U) | ((uint16_t)n1 << 8U) |
+                      ((uint16_t)n2 << 4U) | (uint16_t)n3);
+  return 1;
+}
+
+static void serial_send_packet(uint8_t cmd, const char *payload) {
+  char body[180];
+  char frame[196];
+  uint16_t len = 0;
+  uint16_t crc = 0;
+
+  if (payload == NULL) {
+    payload = "";
+  }
+
+  len = (uint16_t)strlen(payload);
+  snprintf(body, sizeof(body), "%02X%02X%s", cmd, len, payload);
+  crc = crc16_ibm((const uint8_t *)body, (uint16_t)strlen(body));
+  snprintf(frame, sizeof(frame), "\x02%s%04X\r\n", body, crc);
+  serial_send_text(frame);
+}
+
+static uint16_t serial_get_datalog_total(void) {
+  return datalog_ok ? datalog_header.quantidade_valida : 0U;
+}
+
+static uint8_t serial_apply_config_list(const char *payload) {
+  char work[150];
+  char *token = NULL;
+  uint8_t aplicou = 0;
+  uint8_t item_anterior = menu_config_item;
+
+  strncpy(work, payload, sizeof(work) - 1U);
+  work[sizeof(work) - 1U] = '\0';
+
+  token = strtok(work, ",");
+  while (token != NULL) {
+    char *sep = strchr(token, '=');
+    uint32_t valor = 0;
+
+    while (*token == ' ') {
+      token++;
+    }
+
+    if (sep == NULL) {
+      return 0;
+    }
+
+    *sep = '\0';
+    valor = strtoul(sep + 1, NULL, 10);
+
+    if (strcmp(token, "SP") == 0) {
+      menu_config_item = 0;
+    } else if (strcmp(token, "HIS") == 0) {
+      menu_config_item = 1;
+    } else if (strcmp(token, "ALT") == 0) {
+      menu_config_item = 2;
+    } else if (strcmp(token, "BAI") == 0) {
+      menu_config_item = 3;
+    } else if (strcmp(token, "ZUR") == 0) {
+      menu_config_item = 4;
+    } else if (strcmp(token, "GUR") == 0) {
+      menu_config_item = 5;
+    } else if (strcmp(token, "PER") == 0) {
+      menu_config_item = 7;
+    } else {
+      menu_config_item = item_anterior;
+      return 0;
+    }
+
+    menu_set_valor_atual((int32_t)valor);
+    aplicou = 1;
+    token = strtok(NULL, ",");
+  }
+
+  menu_config_item = item_anterior;
+
+  if (aplicou) {
+    salva_config_secagem_flash();
+  }
+  return aplicou;
+}
+
+static uint8_t serial_log_send_record(uint16_t indice) {
+  char payload[150];
+  datalog_record_t record = {0};
+
+  if (!datalog_ok || indice >= datalog_header.quantidade_valida) {
+    serial_send_packet(0x7F, "E06");
+    return 0;
+  }
+
+  uint16_t pos = (datalog_header.proximo_indice + datalog_header.capacidade -
+                  datalog_header.quantidade_valida + indice) %
+                 datalog_header.capacidade;
+  if (!ext_eeprom_read(datalog_record_addr(pos), &record, sizeof(record)) ||
+      record.crc != datalog_record_crc(&record)) {
+    serial_send_packet(0x7F, "E07");
+    return 0;
+  }
+
+  snprintf(payload, sizeof(payload), "%u,%u,%lu,%d,%u,%04X", indice,
+           datalog_header.quantidade_valida, record.timestamp,
+           record.temperatura_dC, record.umidade_dUR, record.flags);
+  serial_send_packet(0x86, payload);
+  return 1;
+}
+
+static void serial_log_start(uint16_t indice, uint16_t quantidade) {
+  uint16_t total = serial_get_datalog_total();
+
+  if (!datalog_ok || indice >= total) {
+    serial_send_packet(0x7F, "E06");
+    return;
+  }
+
+  serial_log_indice = indice;
+  serial_log_restante = total - indice;
+  if (quantidade > 0U && quantidade < serial_log_restante) {
+    serial_log_restante = quantidade;
+  }
+  serial_log_enviando = 1;
+}
+
+static void serial_log_process(void) {
+  if (!serial_log_enviando || serial_log_restante == 0U) {
+    serial_log_enviando = 0;
+    return;
+  }
+
+  if (!serial_log_send_record(serial_log_indice)) {
+    serial_log_enviando = 0;
+    return;
+  }
+
+  serial_log_indice++;
+  serial_log_restante--;
+  if (serial_log_restante == 0U) {
+    serial_log_enviando = 0;
+  }
+}
+
+static void serial_handle_command(const char *cmd) {
+  char payload[150];
+  char decoded_cmd[180];
+  uint32_t valor = 0;
+  uint32_t indice = 0;
+  uint32_t quantidade = 0;
+  uint32_t ano = 0;
+  uint32_t mes = 0;
+  uint32_t dia = 0;
+  uint32_t hora = 0;
+  uint32_t minuto = 0;
+  uint32_t segundo = 0;
+
+  if (*cmd == '\x02') {
+    uint8_t cmd_id = 0;
+    uint8_t tam = 0;
+    uint16_t crc_recebido = 0;
+    uint16_t crc_calc = 0;
+    uint16_t frame_len = (uint16_t)strlen(cmd);
+    const char *body = cmd + 1;
+
+    if (frame_len < 9U || !serial_parse_hex_u8(&body[0], &cmd_id) ||
+        !serial_parse_hex_u8(&body[2], &tam)) {
+      serial_send_packet(0x7F, "E02");
+      return;
+    }
+
+    if ((uint16_t)(4U + tam + 4U) != (frame_len - 1U)) {
+      serial_send_packet(0x7F, "E02");
+      return;
+    }
+
+    if (!serial_parse_hex_u16(&body[4U + tam], &crc_recebido)) {
+      serial_send_packet(0x7F, "E02");
+      return;
+    }
+
+    crc_calc = crc16_ibm((const uint8_t *)body, (uint16_t)(4U + tam));
+    if (crc_calc != crc_recebido) {
+      serial_send_packet(0x7F, "E01");
+      return;
+    }
+
+    if (tam >= sizeof(payload)) {
+      serial_send_packet(0x7F, "E02");
+      return;
+    }
+
+    memcpy(payload, &body[4], tam);
+    payload[tam] = '\0';
+    snprintf(decoded_cmd, sizeof(decoded_cmd), "%02X %s", cmd_id, payload);
+    cmd = decoded_cmd;
+  }
+
+  while (*cmd == ' ' || *cmd == '\t') {
+    cmd++;
+  }
+
+  if (strncmp(cmd, "01", 2) == 0 || strncmp(cmd, "ID", 2) == 0) {
+    snprintf(payload, sizeof(payload), "UMMI-SECAGEM,1,%u", datalog_header.capacidade);
+    serial_send_packet(0x01, payload);
+  } else if (strncmp(cmd, "02", 2) == 0 || strncmp(cmd, "RT", 2) == 0) {
+    uint16_t flags = (soprador_ligado ? 0x0001U : 0x0000U) |
+                     (temperatura_desconectada ? 0x0010U : 0x0000U) |
+                     (umidade_desconectada ? 0x0020U : 0x0000U) |
+                     (umidade_fora_faixa ? 0x0040U : 0x0000U) |
+                     (alarme_temperatura_alta ? 0x0100U : 0x0000U) |
+                     (alarme_temperatura_baixa ? 0x0200U : 0x0000U) |
+                     (alarme_sensor_temperatura ? 0x0400U : 0x0000U) |
+                     (alarme_sensor_umidade ? 0x0800U : 0x0000U) |
+                     (alarme_alimentacao ? 0x1000U : 0x0000U);
+    snprintf(payload, sizeof(payload), "%ld,%u,%u,%u,%04X",
+             (long)temperatura_dC, umidade_dUR, tensao_5v_mV, tensao_12v_mV,
+             flags);
+    serial_send_packet(0x82, payload);
+  } else if (strncmp(cmd, "03", 2) == 0 || strncmp(cmd, "CFG?", 4) == 0) {
+    snprintf(payload, sizeof(payload),
+             "SP=%ld,HIS=%ld,ALT=%ld,BAI=%ld,ZUR=%lu,GUR=%lu,PER=%u",
+             (long)setpoint_temperatura_dC, (long)histerese_temperatura_dC,
+             (long)limite_temperatura_alta_dC,
+             (long)limite_temperatura_baixa_dC, zur_umidade, gur_umidade,
+             datalog_periodo_s);
+    serial_send_packet(0x83, payload);
+  } else if (strncmp(cmd, "04 ", 3) == 0 || strncmp(cmd, "CFG ", 4) == 0) {
+    const char *lista = (cmd[0] == '0') ? (cmd + 3) : (cmd + 4);
+    if (serial_apply_config_list(lista)) {
+      serial_send_packet(0x84, "OK");
+    } else {
+      serial_send_packet(0x7F, "E04");
+    }
+  } else if (sscanf(cmd, "04 SP=%lu", &valor) == 1 ||
+             sscanf(cmd, "SP=%lu", &valor) == 1) {
+    menu_config_item = 0;
+    menu_set_valor_atual((int32_t)valor);
+    salva_config_secagem_flash();
+    serial_send_packet(0x84, "OK");
+  } else if (sscanf(cmd, "04 HIS=%lu", &valor) == 1 ||
+             sscanf(cmd, "HIS=%lu", &valor) == 1) {
+    menu_config_item = 1;
+    menu_set_valor_atual((int32_t)valor);
+    salva_config_secagem_flash();
+    serial_send_packet(0x84, "OK");
+  } else if (sscanf(cmd, "04 ALT=%lu", &valor) == 1 ||
+             sscanf(cmd, "ALT=%lu", &valor) == 1) {
+    menu_config_item = 2;
+    menu_set_valor_atual((int32_t)valor);
+    salva_config_secagem_flash();
+    serial_send_packet(0x84, "OK");
+  } else if (sscanf(cmd, "04 BAI=%lu", &valor) == 1 ||
+             sscanf(cmd, "BAI=%lu", &valor) == 1) {
+    menu_config_item = 3;
+    menu_set_valor_atual((int32_t)valor);
+    salva_config_secagem_flash();
+    serial_send_packet(0x84, "OK");
+  } else if (sscanf(cmd, "04 ZUR=%lu", &valor) == 1 ||
+             sscanf(cmd, "ZUR=%lu", &valor) == 1) {
+    menu_config_item = 4;
+    menu_set_valor_atual((int32_t)valor);
+    salva_config_secagem_flash();
+    serial_send_packet(0x84, "OK");
+  } else if (sscanf(cmd, "04 GUR=%lu", &valor) == 1 ||
+             sscanf(cmd, "GUR=%lu", &valor) == 1) {
+    menu_config_item = 5;
+    menu_set_valor_atual((int32_t)valor);
+    salva_config_secagem_flash();
+    serial_send_packet(0x84, "OK");
+  } else if (sscanf(cmd, "04 PER=%lu", &valor) == 1 ||
+             sscanf(cmd, "PER=%lu", &valor) == 1) {
+    menu_config_item = 7;
+    menu_set_valor_atual((int32_t)valor);
+    salva_config_secagem_flash();
+    serial_send_packet(0x84, "OK");
+  } else if (strncmp(cmd, "05", 2) == 0 || strncmp(cmd, "LOG?", 4) == 0) {
+    snprintf(payload, sizeof(payload), "%u,%u,%u,%u", serial_get_datalog_total(),
+             datalog_header.capacidade, datalog_header.proximo_indice,
+             datalog_periodo_s);
+    serial_send_packet(0x85, payload);
+  } else if (sscanf(cmd, "06 %lu", &indice) == 1 ||
+             sscanf(cmd, "LOG %lu", &indice) == 1) {
+    quantidade = 1;
+    (void)sscanf(cmd, "06 %lu,%lu", &indice, &quantidade);
+    (void)sscanf(cmd, "LOG %lu,%lu", &indice, &quantidade);
+    serial_log_start((uint16_t)indice, (uint16_t)quantidade);
+  } else if (strncmp(cmd, "07 CONFIRMA", 11) == 0 ||
+             strncmp(cmd, "LOGRST", 6) == 0) {
+    datalog_reset();
+    serial_send_packet(0x87, datalog_ok ? "OK" : "E07");
+  } else if (sscanf(cmd, "08 %lu-%lu-%lu,%lu:%lu:%lu", &ano, &mes, &dia, &hora,
+                    &minuto, &segundo) == 6) {
+    RTC_TimeTypeDef time = {0};
+    RTC_DateTypeDef date = {0};
+
+    if (ano >= 2000U) {
+      ano -= 2000U;
+    }
+    if (ano > 99U || mes < 1U || mes > 12U || dia < 1U || dia > 31U ||
+        hora > 23U || minuto > 59U || segundo > 59U) {
+      serial_send_packet(0x7F, "E04");
+      return;
+    }
+
+    time.Hours = (uint8_t)hora;
+    time.Minutes = (uint8_t)minuto;
+    time.Seconds = (uint8_t)segundo;
+    date.Year = (uint8_t)ano;
+    date.Month = (uint8_t)mes;
+    date.Date = (uint8_t)dia;
+    date.WeekDay = RTC_WEEKDAY_MONDAY;
+
+    if (HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN) != HAL_OK ||
+        HAL_RTC_SetDate(&hrtc, &date, RTC_FORMAT_BIN) != HAL_OK) {
+      serial_send_packet(0x7F, "E08");
+    } else {
+      serial_send_packet(0x88, "OK");
+    }
+  } else if (strncmp(cmd, "09", 2) == 0 || strncmp(cmd, "RTC?", 4) == 0) {
+    RTC_TimeTypeDef time = {0};
+    RTC_DateTypeDef date = {0};
+
+    if (HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN) != HAL_OK ||
+        HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN) != HAL_OK) {
+      serial_send_packet(0x7F, "E08");
+      return;
+    }
+    snprintf(payload, sizeof(payload), "20%02u-%02u-%02u,%02u:%02u:%02u",
+             date.Year, date.Month, date.Date, time.Hours, time.Minutes,
+             time.Seconds);
+    serial_send_packet(0x89, payload);
+  } else {
+    serial_send_packet(0x7F, "E03");
+  }
+}
+
+static void serial_process(void) {
+  while (serial_rx_tail != serial_rx_head) {
+    uint8_t byte = serial_rx_buffer[serial_rx_tail];
+    serial_rx_tail = (uint8_t)((serial_rx_tail + 1U) % sizeof(serial_rx_buffer));
+
+    if (byte == '\r' || byte == '\n') {
+      if (serial_cmd_len > 0U) {
+        serial_cmd_buffer[serial_cmd_len] = '\0';
+        serial_handle_command(serial_cmd_buffer);
+        serial_cmd_len = 0;
+      }
+    } else if (serial_cmd_len < (sizeof(serial_cmd_buffer) - 1U)) {
+      serial_cmd_buffer[serial_cmd_len++] = (char)byte;
+    } else {
+      serial_cmd_len = 0;
+      serial_send_packet(0x7F, "E02");
+    }
   }
 }
 
