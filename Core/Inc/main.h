@@ -53,8 +53,7 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-void ativa_alarme(void);
-void btn_relogio_processado(void);
+void serial_tick_1ms(void);
 void serial_usart1_irq_handler(void);
 /* USER CODE END EFP */
 

@@ -1,9 +1,3 @@
-/*
- * display.c
- *
- *  Created on: Apr 1, 2026
- *      Author: Lucas
- */
 #include "display.h"
 #include "defines.h"
 #include "main.h"
@@ -59,7 +53,8 @@ static const uint8_t tabela_display[] = {
     0b01000000, // 29 = "-"
     0b00111111, // 30 = k
     0b00011100, // 31 = U
-    0b01011011  // 32 = Z
+    0b01011011, // 32 = Z
+    0b00111110  // 33 = V
 };
 
 static void escreve_segmentos(uint8_t valor);

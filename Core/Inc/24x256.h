@@ -1,10 +1,3 @@
-/*
- * 24x256.h
- *
- *  Created on: Apr 7, 2026
- *      Author: Lucas
- */
-
 #ifndef INC_24X256_H_
 #define INC_24X256_H_
 

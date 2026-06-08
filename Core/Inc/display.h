@@ -1,10 +1,3 @@
-/*
- * display.h
- *
- *  Created on: Apr 1, 2026
- *      Author: Lucas
- */
-
 #ifndef INC_DISPLAY_H_
 #define INC_DISPLAY_H_
 
@@ -46,6 +39,7 @@ extern volatile uint8_t splash_digits[6];
 #define DSP_MINUS 29
 #define DSP_K 30
 #define DSP_Z 32
+#define DSP_V 33
 
 void display_scan(void);
 void display_atualiza(uint32_t valor);

@@ -1,10 +1,3 @@
-/*
- * 24x256.c
- *
- *  Created on: Apr 7, 2026
- *      Author: Lucas
- */
-
 // Driver para a memória EEPROM 24x256, utilizando a interface I2C do STM32F4
 // Inicializa a comunicação com a memória EEPROM, verificando se o dispositivo
 // está pronto

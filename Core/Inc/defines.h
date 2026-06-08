@@ -1,10 +1,3 @@
-/*
- * defines.h
- *
- *  Created on: Apr 1, 2026
- *      Author: Lucas
- */
-
 #ifndef INC_DEFINES_H_
 #define INC_DEFINES_H_
 
@@ -58,15 +51,6 @@
 #define TURBO_LEVEL2 5
 #define TURBO_LEVEL3 3
 
-// entradas digitais
-#define INPUT_01 PB8_PIN_ENTRADA_01_Pin
-#define INPUT_01_PORT PB8_PIN_ENTRADA_01_GPIO_Port
-#define INPUT_02 PB9_PIN_ENTRADA_02_Pin
-#define INPUT_02_PORT PB9_PIN_ENTRADA_02_GPIO_Port
-#define INPUT_01_ACTIVE_LEVEL LOW
-#define INPUT_02_ACTIVE_LEVEL HIGH
-#define INPUT_DEBOUNCE_TICKS 1U
-
 // leds
 #define LED_01 PC10_pOutDig_LedSts1_Pin
 #define LED_01_PORT PC10_pOutDig_LedSts1_GPIO_Port
@@ -78,8 +62,6 @@
 #define LED_04_PORT PC13_pOutDig_LedSts4_GPIO_Port
 
 // Saídas digitais
-//#define RELE_01 PC7_PIN_SAIDA_DIGITAL1_Pin
-//#define RELE_01_PORT PC7_PIN_SAIDA_DIGITAL1_GPIO_Port
 #define SAIDA_01 PC7_PIN_SAIDA_DIGITAL1_Pin
 #define SAIDA_01_PORT PC7_PIN_SAIDA_DIGITAL1_GPIO_Port
 #define SAIDA_02 PC9_PIN_SAIDA_DIGITAL2_Pin
@@ -88,12 +70,5 @@
 // Outras definições
 #define HIGH GPIO_PIN_SET
 #define LOW GPIO_PIN_RESET
-
-#define MODO_CONTADOR 0
-#define MODO_SETPOINT 1
-#define MODO_OBRIGATORIO 2 
-
-#define TEMPO_LONG_PRESS 100
-#define TEMPO_REPEAT 30
 
 #endif /* INC_DEFINES_H_ */

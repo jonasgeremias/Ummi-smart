@@ -137,15 +137,21 @@ O buzzer deve operar por temporizacao cooperativa, sem bloquear o loop principal
 
 ### Tela Principal
 
-O display principal deve alternar ou compactar:
+O display principal deve compactar umidade e temperatura:
 
-- Temperatura em graus Celsius.
-- Umidade relativa em porcentagem.
+- Formato normal: `UUUTTT`.
+- Os tres primeiros digitos mostram umidade.
+- Os tres ultimos digitos mostram temperatura.
+- Se um sensor estiver desconectado ou invalido, seu bloco deve mostrar `---`.
+- Exemplo com ambos desconectados: `------`.
 
-Formato inicial proposto para o Checkpoint 1:
+### Splash Inicial
 
-- Alternar a cada 2 s entre `ttt.tC` e `uu.uH` conforme capacidade dos 6 digitos/segmentos.
-- Caso a tabela de caracteres nao comporte `C`/`H` simultaneamente com decimal, usar tela numerica alternada e ponto decimal para indicar casas.
+Ao energizar, a aplicacao deve exibir a sequencia:
+
+- `BE1  1.0`, com ponto decimal entre `1` e `0`.
+- Data do RTC em `DDMMAA`.
+- Hora do RTC em `HHMMSS`.
 
 ### Entrada No Menu
 
@@ -182,13 +188,18 @@ Parametros iniciais:
 | `P06` | `P06GUR` | Ganho da umidade |
 | `P07` | `P07LOG` | Reset do datalogger; editar para `1` e confirmar |
 | `P08` | `P08PER` | Periodo de gravacao do datalogger em segundos |
+| `P09` | `P09DAT` | Data do RTC em `DDMMAA` |
+| `P10` | `P10HOR` | Hora do RTC em `HHMM00`; segundos ficam em `00` pelo menu |
+
+Em `P09DAT` e `P10HOR`, ao entrar com ENTER a edicao e feita por campo de dois digitos. O campo ativo pisca; ao pressionar MAIS ou MENOS o valor completo fica aceso por 1 s para facilitar a leitura. ENTER avanca para o proximo campo e, no ultimo campo, grava o RTC e mostra `-SAVE-`.
 
 ### Diagnostico Oculto
 
 Na tela principal:
 
 - Pressionar `BOTAO_MAX` 5 vezes seguidas abre a tela de diagnostico.
-- A tela de diagnostico exibe tensao 5 V e tensao 12 V medidas.
+- A tela de diagnostico exibe as tensoes simultaneamente: tres digitos da esquerda para 12 V e tres digitos da direita para 5 V.
+- Exemplo: `12.005.0`, com os pontos decimais ligados para indicar `12.0 V` e `05.0 V`.
 - A saida do diagnostico deve ocorrer por `BOTAO_RELOGIO`, timeout ou retorno definido na implementacao.
 
 ### Fluxo Do Menu
@@ -301,7 +312,11 @@ Reset deve recriar o cabecalho, zerar contadores e nao apagar configuracoes da a
 - USART1.
 - 115200 bps.
 - 8 bits, sem paridade, 1 stop bit.
-- Recepcao por interrupcao e buffer circular.
+- Recepcao por interrupcao em FIFO circular, no mesmo conceito dos exemplos `_Consulta/P0337-TX-G4` e `_Consulta/P0196-RX-STM32`.
+- A ISR apenas le o byte, grava no FIFO, atualiza ultimo/penultimo byte e rearma timeout de 10 ms.
+- Se receber `\r` ou `\n`, a ISR zera o timeout para o loop tratar o pacote imediatamente.
+- Erros de UART `PE`, `FE`, `NE` e `ORE` sao limpos na ISR pela sequencia de leitura `SR`/`DR`; em erro critico o FIFO de recepcao e descartado.
+- No loop principal, quando o timeout expira ou a quebra de linha e recebida, os bytes sao transferidos para um segundo buffer com interrupcao bloqueada apenas pelo tempo da copia; em seguida a recepcao e liberada e o pacote e tratado fora da interrupcao.
 
 ### Enquadramento
 
@@ -358,7 +373,7 @@ Erros devem responder com comando de NACK (`7F`) e codigo de erro.
 | `86` | App -> host | Registro de datalogger | indice atual, total enviado/total disponivel, campos do registro |
 | `07` | Host -> app | Resetar datalogger | `CONFIRMA` |
 | `87` | App -> host | Reset datalogger | `OK` |
-| `08` | Host -> app | Ajustar RTC | `YYYY-MM-DD,hh:mm:ss` |
+| `08` | Host -> app | Ajustar RTC | `DDMMAAHHMMSS` |
 | `88` | App -> host | RTC ajustado | `OK` |
 | `09` | Host -> app | Ler RTC | vazio |
 | `89` | App -> host | RTC atual | `YYYY-MM-DD,hh:mm:ss` |
@@ -376,8 +391,11 @@ Pacotes completos iniciados por `STX` ja sao validados com `CMD`, `TAM` e `CRC16
 - `05` ou `LOG?`: retorna status do logger em `85`.
 - `06 indice,quantidade` ou `LOG indice,quantidade`: inicia envio assincrono de registros em pacotes `86`. Se a quantidade for omitida, envia 1 registro.
 - `07 CONFIRMA` ou `LOGRST`: reseta o logger e responde `87`.
-- `08 YYYY-MM-DD,hh:mm:ss`: ajusta RTC e responde `88`.
+- `STOPLOG`: cancela envio assincrono do logger em andamento e responde `87,OK`.
+- `08 DDMMAAHHMMSS`: ajusta RTC e responde `88`.
 - `09` ou `RTC?`: retorna RTC em `89`.
+
+Status do logger (`85`): `total,capacidade,proximo_indice,periodo_s,eeprom_ok,enviando`.
 
 ### Leitura Assincrona Do Datalogger
 

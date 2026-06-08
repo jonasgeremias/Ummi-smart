@@ -14,9 +14,6 @@
  * If no LICENSE file comes with this software, it is provided AS-IS.
  *
  *
- * PROJETO CONTADOR DE PEÇAS COM DISPLAY 7 SEGMENTOS
- * GRAVAÇÃO DE VALORES NA EEPROM
- *
  ******************************************************************************
  */
 /* USER CODE END Header */
@@ -78,7 +75,6 @@ USART_HandleTypeDef husart1;
 USART_HandleTypeDef husart6;
 
 /* USER CODE BEGIN PV */
-static const uint32_t VALOR_MAXIMO = 999999U;
 static const uint32_t EEPROM_ASSINATURA_APP = 0x554D4D32U;
 static const uint32_t ADC_VREF_MV = 3300U;
 static const uint32_t ADC_FULL_SCALE = 4095U;
@@ -103,18 +99,15 @@ static const uint16_t TENSAO_12V_MAX_mV = 15000U;
 static const uint16_t DATALOG_PERIODO_DEFAULT_s = 60U;
 static const uint16_t DATALOG_BASE_ADDR = 0x0200U;
 static const uint16_t DATALOG_RECORDS_ADDR = 0x0240U;
+static const uint32_t EXT_EEPROM_SIZE_BYTES = 32768U;
 static const uint32_t DATALOG_ASSINATURA = 0x554D4C47U;
 static const uint16_t DATALOG_VERSAO = 1U;
 static const uint8_t EXT_EEPROM_ADDR = (0x50U << 1);
 static const uint16_t EXT_EEPROM_PAGE_SIZE = 64U;
 static const uint16_t EXT_EEPROM_TIMEOUT_MS = 20U;
+#define SERIAL_RX_BUFFER_SIZE 256U
+#define SERIAL_RX_TIMEOUT_MS 10U
 
-static uint32_t contador = 0;
-static uint32_t ultima_contagem = 0;
-static uint32_t ultima_conferencia = 0;
-static int32_t setpoint_inspecao = 0;
-static int32_t setpoint_obriga_inspecao = 0;
-static int32_t setpoint_temp = 0;
 static int32_t temperatura_dC = 0;
 static uint16_t umidade_dUR = 0;
 static uint16_t tensao_5v_mV = 0;
@@ -137,20 +130,18 @@ static uint16_t datalog_periodo_s = DATALOG_PERIODO_DEFAULT_s;
 static uint16_t datalog_timer_s = DATALOG_PERIODO_DEFAULT_s;
 static uint8_t datalog_ok = 0;
 static uint8_t datalog_reset_confirm = 0;
+static uint32_t rtc_data_ddmmaa = 10126U;
+static uint32_t rtc_hora_hhmmss = 0U;
 static uint8_t temperatura_desconectada = 1;
 static uint8_t umidade_desconectada = 1;
 
 static uint8_t modo = 0;
-static uint8_t atualiza_display_timeout = 0;
 static uint16_t buzzer_periodo_timeout = 0;
 static uint8_t buzzer_ligado_timeout = 0;
-static uint16_t reset_contador_timeout = 0;
 static uint16_t tac_relogio_timeout = 0;
 static uint8_t leitura_analogica_20ms = 0;
 static uint8_t analog_amostras_validas = 0;
 static uint8_t analog_media_index = 0;
-static uint8_t tela_alterna_timeout = 0;
-static uint8_t diag_tela_12v = 0;
 static uint16_t diag_timeout_50ms = 0;
 static uint8_t btn_max_clicks_diag = 0;
 static uint8_t btn_max_solto_diag = 1;
@@ -158,6 +149,9 @@ static uint16_t tempo_baixa_timeout = TEMPO_ESTABILIZACAO_BAIXA_50MS;
 static uint16_t rele_comutacao_timeout = 0;
 static uint8_t menu_config_item = 0;
 static uint8_t menu_editando = 0;
+static uint8_t menu_bloqueia_primeira_soltura = 0;
+static uint8_t menu_rtc_campo = 0;
+static uint8_t menu_rtc_visualiza_timeout = 0;
 static uint16_t analog_buffer_umidade[8] = {0};
 static uint16_t analog_buffer_temp[8] = {0};
 static uint16_t analog_buffer_temp_ref[8] = {0};
@@ -170,29 +164,19 @@ static uint32_t analog_soma_5v = 0;
 static uint32_t analog_soma_12v = 0;
 static datalog_header_t datalog_header = {0};
 
-static uint32_t eeprom_timer = 0;
-uint8_t eeprom_flagaux_salvar = 0;
-
-static volatile uint8_t serial_rx_buffer[128];
-static volatile uint8_t serial_rx_head = 0;
-static volatile uint8_t serial_rx_tail = 0;
+static volatile uint8_t serial_rx_buffer[SERIAL_RX_BUFFER_SIZE];
+static volatile uint16_t serial_rx_posicao_fifo = 0;
+static volatile uint16_t serial_rx_posicao_leitura = 0;
+static volatile uint8_t serial_rx_ultimo_byte = 0;
+static volatile uint8_t serial_rx_penultimo_byte = 0;
+static volatile uint8_t serial_rx_overflow = 0;
+static volatile uint8_t serial_rx_timeout_ms = 0;
+static volatile uint8_t serial_rx_error_isr = 0;
 static char serial_cmd_buffer[128];
-static uint8_t serial_cmd_len = 0;
 static uint8_t serial_log_enviando = 0;
 static uint16_t serial_log_indice = 0;
 static uint16_t serial_log_restante = 0;
-// uint32_t setpoint = 100;
-
-// Variáveis para controle do modo
-// Variaveis display
-// volatile uint16_t splash_timeout = 0;
-
-// variaveis auxiliares
-// uint8_t saida_01 = 0;
-
-// variaveis eeprom
-
-// flags auxiliares
+static uint8_t serial_log_pausa_50ms = 0;
 
 /* USER CODE END PV */
 
@@ -206,18 +190,12 @@ static void MX_USART6_Init(void);
 /* USER CODE BEGIN PFP */
 static void splash_screen(uint16_t tempo_ms, uint8_t d5, uint8_t d4,
                           uint8_t d3, uint8_t d2, uint8_t d1, uint8_t d0);
+static void startup_splash_sequence(void);
 static void processa_tick_50ms(void);
-static void trata_tac_relogio_press(void);
-static void trata_reset_contador(void);
-static void atualiza_display_int32(uint32_t valor);
-static void modo_contagem(void) __attribute__((unused));
-static void modo_setpoint_inspecao(void) __attribute__((unused));
 static void adc1_init(void);
 static uint16_t adc1_read_channel(uint32_t channel);
 static void atualiza_medicoes_analogicas(void);
-static void atualiza_display_temperatura(void) __attribute__((unused));
-static void atualiza_display_umidade(void) __attribute__((unused));
-static void atualiza_display_tensao(uint16_t tensao_mV, uint8_t label_12v);
+static void atualiza_display_tensoes_diagnostico(void);
 static void trata_clicks_diagnostico(void);
 static void trata_menu_secagem_press(void);
 static void controle_buzzer(uint8_t alarme_ativo);
@@ -225,8 +203,12 @@ static void controle_soprador_e_alarmes(void);
 static void salva_config_secagem_flash(void);
 static int32_t menu_get_valor_atual(void);
 static void menu_set_valor_atual(int32_t valor);
+static uint8_t menu_item_rtc(void);
+static uint8_t menu_rtc_qtd_campos(void);
+static void menu_rtc_ajusta_campo(int8_t delta);
 static void menu_display_lista(void);
 static void menu_display_edicao(void);
+static void menu_display_rtc_edicao(uint32_t valor);
 static uint32_t checksum_bytes_local(const void *data, uint32_t size);
 static uint32_t datalog_header_crc(const datalog_header_t *header);
 static uint32_t datalog_record_crc(const datalog_record_t *record);
@@ -234,19 +216,19 @@ static uint8_t ext_eeprom_wait_ready(uint32_t timeout_ms);
 static uint8_t ext_eeprom_read(uint16_t addr, void *data, uint16_t size);
 static uint8_t ext_eeprom_write(uint16_t addr, const void *data, uint16_t size);
 static uint16_t datalog_record_addr(uint16_t index);
+static uint16_t datalog_expected_capacity(void);
 static void datalog_format_header(void);
 static void datalog_init(void);
 static void datalog_reset(void);
 static void datalog_tick_1s(void);
 static void datalog_grava_amostra(void);
 static uint32_t datalog_get_timestamp(void);
+static void rtc_carrega_compacto(void);
+static uint8_t rtc_aplica_compacto(uint32_t data_ddmmaa, uint32_t hora_hhmmss);
 static void modo_secagem(void);
 static void modo_menu_checkpoint(void);
 static void modo_diagnostico(void);
 static void prepara_dados_eeprom(void);
-static void salva_dados_agendado(void);
-static void salva_dados_imediato(void);
-static void salva_presets_flash(void);
 static void carrega_config(void);
 static void serial_init_rx(void);
 static void serial_send_text(const char *text);
@@ -254,6 +236,10 @@ static void serial_process(void);
 static void serial_handle_command(const char *cmd);
 static void serial_send_packet(uint8_t cmd, const char *payload);
 static uint8_t serial_apply_config_list(const char *payload);
+static uint8_t serial_apply_config_command(const char *cmd);
+static uint8_t serial_parse_decimal_field(const char **text, uint32_t *value);
+static uint8_t serial_parse_log_command(const char *cmd, uint32_t *indice,
+                                        uint32_t *quantidade);
 static void serial_log_start(uint16_t indice, uint16_t quantidade);
 static void serial_log_process(void);
 static uint8_t serial_log_send_record(uint16_t indice);
@@ -261,6 +247,9 @@ static uint16_t crc16_ibm(const uint8_t *data, uint16_t len);
 static int8_t serial_hex_nibble(char c);
 static uint8_t serial_parse_hex_u8(const char *text, uint8_t *value);
 static uint8_t serial_parse_hex_u16(const char *text, uint16_t *value);
+static uint8_t serial_parse_u32_strict(const char *text, uint32_t *value);
+static uint8_t serial_text_is_digits(const char *text, uint8_t expected_len);
+static uint8_t rtc_days_in_month(uint32_t month, uint32_t year);
 static uint16_t serial_get_datalog_total(void);
 
 /* USER CODE END PFP */
@@ -310,9 +299,10 @@ int main(void)
   eeprom_init();
   carrega_config();
   datalog_init();
+  rtc_carrega_compacto();
   serial_init_rx();
   serial_send_text("UMMI SECAGEM FUMO\r\n");
-  splash_screen(40, DSP_B, DSP_E, DSP_1, DSP_0, DSP_0, 2);
+  startup_splash_sequence();
   modo = 0;
   /* USER CODE END 2 */
 
@@ -326,6 +316,9 @@ int main(void)
     if (timer_flag_50ms) {
       timer_flag_50ms = 0;
       processa_tick_50ms();
+    }
+    if (timer_flag_1ms) {
+      timer_flag_1ms = 0;
     }
     if (timer_flag_10ms) {
       timer_flag_10ms = 0;
@@ -351,17 +344,6 @@ int main(void)
       modo = 0;
     }
 
-    if (eeprom_flagaux_salvar == 1) {
-      eeprom_timer = HAL_GetTick();
-      eeprom_flagaux_salvar = 2;
-    }
-    if (eeprom_flagaux_salvar == 2) {
-      if (HAL_GetTick() - eeprom_timer > 1000) {
-        eeprom_write(&dados);
-        eeprom_flagaux_salvar = 0;
-      }
-    }
-    eeprom_process();
   }
   /* USER CODE END 3 */
 }
@@ -651,6 +633,23 @@ static void splash_screen(uint16_t timeout_50ms, uint8_t d5, uint8_t d4,
   splash_digits[5] = d5;
 }
 
+static void startup_splash_sequence(void) {
+  const uint16_t etapa_50ms = 24U;
+  const uint32_t etapa_ms = 1200U;
+
+  splash_screen(etapa_50ms, DSP_B, DSP_E, DSP_1, DSP_OFF, DSP_1, DSP_0);
+  display_set_decimal_points((uint8_t)etapa_50ms, 0x02);
+  HAL_Delay(etapa_ms);
+
+  display_set_decimal_points(2, 0);
+  display_atualiza(rtc_data_ddmmaa);
+  splash_timeout = 0;
+  HAL_Delay(etapa_ms);
+
+  display_atualiza(rtc_hora_hhmmss);
+  HAL_Delay(etapa_ms);
+}
+
 static void adc1_init(void) {
   __HAL_RCC_ADC1_CLK_ENABLE();
 
@@ -843,56 +842,6 @@ static void controle_soprador_e_alarmes(void) {
   controle_buzzer(alarme_ativo);
 }
 
-static void atualiza_display_temperatura(void) {
-  uint32_t valor = (temperatura_dC < 0) ? 0U : (uint32_t)temperatura_dC;
-
-  if (analog_amostras_validas < ADC_MIN_AMOSTRAS_STATUS) {
-    display_set_digits(DSP_T, DSP_OFF, DSP_MINUS, DSP_MINUS, DSP_MINUS,
-                       DSP_OFF);
-    display_set_decimal_points(2, 0);
-    return;
-  }
-
-  if (temperatura_desconectada) {
-    display_set_digits(DSP_T, DSP_D, DSP_E, DSP_S, DSP_C, DSP_OFF);
-    display_set_decimal_points(2, 0);
-    return;
-  }
-
-  if (valor > 999U) {
-    valor = 999U;
-  }
-
-  display_set_digits(DSP_T, DSP_OFF, DSP_OFF, (valor / 100U) % 10U,
-                     (valor / 10U) % 10U, valor % 10U);
-  display_set_decimal_points(2, 0x02);
-}
-
-static void atualiza_display_umidade(void) {
-  uint32_t valor = umidade_dUR;
-
-  if (analog_amostras_validas < ADC_MIN_AMOSTRAS_STATUS) {
-    display_set_digits(DSP_H, DSP_OFF, DSP_MINUS, DSP_MINUS, DSP_MINUS,
-                       DSP_OFF);
-    display_set_decimal_points(2, 0);
-    return;
-  }
-
-  if (umidade_desconectada) {
-    display_set_digits(DSP_H, DSP_D, DSP_E, DSP_S, DSP_C, DSP_OFF);
-    display_set_decimal_points(2, 0);
-    return;
-  }
-
-  if (valor > 999U) {
-    valor = 999U;
-  }
-
-  display_set_digits(DSP_H, DSP_OFF, DSP_OFF, (valor / 100U) % 10U,
-                     (valor / 10U) % 10U, valor % 10U);
-  display_set_decimal_points(2, 0x02);
-}
-
 static void atualiza_display_principal(void) {
   uint32_t umidade = umidade_dUR;
   uint32_t temperatura = (temperatura_dC < 0) ? 0U : (uint32_t)temperatura_dC;
@@ -934,22 +883,22 @@ static void atualiza_display_principal(void) {
   display_set_decimal_points(2, 0);
 }
 
-static void atualiza_display_tensao(uint16_t tensao_mV, uint8_t label_12v) {
-  uint32_t valor_dV = ((uint32_t)tensao_mV + 50U) / 100U;
+static void atualiza_display_tensoes_diagnostico(void) {
+  uint32_t valor_12v_dV = ((uint32_t)tensao_12v_mV + 50U) / 100U;
+  uint32_t valor_5v_dV = ((uint32_t)tensao_5v_mV + 50U) / 100U;
 
-  if (valor_dV > 999U) {
-    valor_dV = 999U;
+  if (valor_12v_dV > 999U) {
+    valor_12v_dV = 999U;
+  }
+  if (valor_5v_dV > 999U) {
+    valor_5v_dV = 999U;
   }
 
-  if (label_12v) {
-    display_set_digits(DSP_1, DSP_2, DSP_OFF, (valor_dV / 100U) % 10U,
-                       (valor_dV / 10U) % 10U, valor_dV % 10U);
-    display_set_decimal_points(2, 0x02);
-  } else {
-    display_set_digits(DSP_5, DSP_OFF, DSP_OFF, (valor_dV / 100U) % 10U,
-                       (valor_dV / 10U) % 10U, valor_dV % 10U);
-    display_set_decimal_points(2, 0x02);
-  }
+  display_set_digits((valor_12v_dV / 100U) % 10U,
+                     (valor_12v_dV / 10U) % 10U, valor_12v_dV % 10U,
+                     (valor_5v_dV / 100U) % 10U,
+                     (valor_5v_dV / 10U) % 10U, valor_5v_dV % 10U);
+  display_set_decimal_points(2, 0x12);
 }
 
 static void trata_clicks_diagnostico(void) {
@@ -966,8 +915,6 @@ static void trata_clicks_diagnostico(void) {
     if (btn_max_clicks_diag >= 5U) {
       btn_max_clicks_diag = 0;
       diag_timeout_50ms = 600;
-      diag_tela_12v = 0;
-      tela_alterna_timeout = 0;
       modo = 3;
       splash_screen(10, DSP_D, DSP_I, DSP_A, DSP_G, DSP_OFF, DSP_OFF);
     }
@@ -976,42 +923,34 @@ static void trata_clicks_diagnostico(void) {
 
 static void trata_menu_secagem_press(void) {
   static uint8_t enter_pendente = 0;
-  static uint8_t splash_menu_mostrada = 0;
 
   if (btn_relogio_status && tac_relogio_timeout >= 60U) {
     enter_pendente = 1;
-    if (!splash_menu_mostrada) {
-      splash_menu_mostrada = 1;
-      splash_screen(20, DSP_S, DSP_E, DSP_T, DSP_U, DSP_P, DSP_OFF);
-    }
+    splash_screen(4, DSP_S, DSP_E, DSP_T, DSP_U, DSP_P, DSP_OFF);
     return;
   }
 
   if (btn_relogio_status || !enter_pendente) {
-    if (!btn_relogio_status) {
-      splash_menu_mostrada = 0;
-    }
     return;
   }
 
   enter_pendente = 0;
-  splash_menu_mostrada = 0;
   menu_config_item = 0;
   menu_editando = 0;
+  menu_bloqueia_primeira_soltura = 1;
   modo = 1;
-  splash_screen(10, DSP_P, DSP_0, DSP_1, DSP_OFF, DSP_T, DSP_OFF);
+  splash_timeout = 0;
+  menu_display_lista();
 }
 
 static void salva_config_secagem_flash(void) {
   dados.assinatura = EEPROM_ASSINATURA_APP;
   dados.setpoint_01 = (uint32_t)setpoint_temperatura_dC;
-  dados.setpoint_obrigatorio_01 = (uint32_t)limite_temperatura_alta_dC;
   dados.histerese_temperatura_dC = (uint32_t)histerese_temperatura_dC;
   dados.limite_temperatura_alta_dC = (uint32_t)limite_temperatura_alta_dC;
   dados.limite_temperatura_baixa_dC = (uint32_t)limite_temperatura_baixa_dC;
   dados.zur_umidade = zur_umidade;
   dados.gur_umidade = gur_umidade;
-  dados.datalog_periodo_s = datalog_periodo_s;
   dados.datalog_periodo_s = datalog_periodo_s;
   eeprom_write_config(&dados);
 }
@@ -1088,9 +1027,16 @@ static uint16_t datalog_record_addr(uint16_t index) {
                     (index * sizeof(datalog_record_t)));
 }
 
+static uint16_t datalog_expected_capacity(void) {
+  if (DATALOG_RECORDS_ADDR >= EXT_EEPROM_SIZE_BYTES) {
+    return 0;
+  }
+  return (uint16_t)((EXT_EEPROM_SIZE_BYTES - DATALOG_RECORDS_ADDR) /
+                    sizeof(datalog_record_t));
+}
+
 static void datalog_format_header(void) {
-  uint16_t capacidade =
-      (uint16_t)((32768U - DATALOG_RECORDS_ADDR) / sizeof(datalog_record_t));
+  uint16_t capacidade = datalog_expected_capacity();
 
   memset(&datalog_header, 0, sizeof(datalog_header));
   datalog_header.assinatura = DATALOG_ASSINATURA;
@@ -1115,6 +1061,7 @@ static void datalog_init(void) {
       datalog_header.versao != DATALOG_VERSAO ||
       datalog_header.record_size != sizeof(datalog_record_t) ||
       datalog_header.capacidade == 0U ||
+      datalog_header.capacidade != datalog_expected_capacity() ||
       datalog_header.crc != datalog_header_crc(&datalog_header)) {
     datalog_reset();
     return;
@@ -1151,6 +1098,71 @@ static uint32_t datalog_get_timestamp(void) {
   return ((uint32_t)date.Year << 26) | ((uint32_t)date.Month << 22) |
          ((uint32_t)date.Date << 17) | ((uint32_t)time.Hours << 12) |
          ((uint32_t)time.Minutes << 6) | time.Seconds;
+}
+
+static void rtc_carrega_compacto(void) {
+  RTC_TimeTypeDef time = {0};
+  RTC_DateTypeDef date = {0};
+
+  if (HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN) != HAL_OK ||
+      HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN) != HAL_OK) {
+    return;
+  }
+
+  rtc_data_ddmmaa = ((uint32_t)date.Date * 10000U) +
+                    ((uint32_t)date.Month * 100U) + date.Year;
+  rtc_hora_hhmmss = ((uint32_t)time.Hours * 10000U) +
+                    ((uint32_t)time.Minutes * 100U) + time.Seconds;
+}
+
+static uint8_t rtc_days_in_month(uint32_t month, uint32_t year) {
+  static const uint8_t days_by_month[12] = {
+      31U, 28U, 31U, 30U, 31U, 30U, 31U, 31U, 30U, 31U, 30U, 31U};
+  uint32_t full_year = 2000U + year;
+
+  if (month < 1U || month > 12U) {
+    return 0;
+  }
+  if (month == 2U &&
+      ((full_year % 4U == 0U && full_year % 100U != 0U) ||
+       (full_year % 400U == 0U))) {
+    return 29U;
+  }
+  return days_by_month[month - 1U];
+}
+
+static uint8_t rtc_aplica_compacto(uint32_t data_ddmmaa, uint32_t hora_hhmmss) {
+  RTC_TimeTypeDef time = {0};
+  RTC_DateTypeDef date = {0};
+  uint32_t dia = data_ddmmaa / 10000U;
+  uint32_t mes = (data_ddmmaa / 100U) % 100U;
+  uint32_t ano = data_ddmmaa % 100U;
+  uint32_t hora = hora_hhmmss / 10000U;
+  uint32_t minuto = (hora_hhmmss / 100U) % 100U;
+  uint32_t segundo = hora_hhmmss % 100U;
+
+  if (dia < 1U || mes < 1U || mes > 12U ||
+      dia > rtc_days_in_month(mes, ano) || ano > 99U ||
+      hora > 23U || minuto > 59U || segundo > 59U) {
+    return 0;
+  }
+
+  time.Hours = (uint8_t)hora;
+  time.Minutes = (uint8_t)minuto;
+  time.Seconds = (uint8_t)segundo;
+  date.Date = (uint8_t)dia;
+  date.Month = (uint8_t)mes;
+  date.Year = (uint8_t)ano;
+  date.WeekDay = RTC_WEEKDAY_MONDAY;
+
+  if (HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN) != HAL_OK ||
+      HAL_RTC_SetDate(&hrtc, &date, RTC_FORMAT_BIN) != HAL_OK) {
+    return 0;
+  }
+
+  rtc_data_ddmmaa = data_ddmmaa;
+  rtc_hora_hhmmss = hora_hhmmss;
+  return 1;
 }
 
 static void datalog_grava_amostra(void) {
@@ -1230,6 +1242,10 @@ static int32_t menu_get_valor_atual(void) {
     return datalog_reset_confirm;
   case 7:
     return datalog_periodo_s;
+  case 8:
+    return (int32_t)rtc_data_ddmmaa;
+  case 9:
+    return (int32_t)rtc_hora_hhmmss;
   default:
     return 0;
   }
@@ -1241,6 +1257,8 @@ static void menu_set_valor_atual(int32_t valor) {
   }
   if (menu_config_item < 4U && valor > 999) {
     valor = 999;
+  } else if (menu_config_item >= 8U && valor > 999999) {
+    valor = 999999;
   }
 
   switch (menu_config_item) {
@@ -1298,8 +1316,79 @@ static void menu_set_valor_atual(int32_t valor) {
       datalog_timer_s = datalog_periodo_s;
     }
     break;
+  case 8:
+    rtc_data_ddmmaa = (uint32_t)valor;
+    break;
+  case 9:
+    valor = (valor / 100) * 100;
+    rtc_hora_hhmmss = (uint32_t)valor;
+    break;
   default:
     break;
+  }
+}
+
+static uint8_t menu_item_rtc(void) {
+  return (menu_config_item == 8U || menu_config_item == 9U);
+}
+
+static uint8_t menu_rtc_qtd_campos(void) {
+  return (menu_config_item == 8U) ? 3U : 2U;
+}
+
+static uint32_t menu_ajusta_circular(uint32_t valor, uint32_t min,
+                                     uint32_t max, int8_t delta) {
+  if (valor < min || valor > max) {
+    valor = min;
+  }
+  if (delta > 0) {
+    return (valor >= max) ? min : (valor + 1U);
+  }
+  return (valor <= min) ? max : (valor - 1U);
+}
+
+static void menu_rtc_ajusta_campo(int8_t delta) {
+  if (menu_config_item == 8U) {
+    uint32_t dia = rtc_data_ddmmaa / 10000U;
+    uint32_t mes = (rtc_data_ddmmaa / 100U) % 100U;
+    uint32_t ano = rtc_data_ddmmaa % 100U;
+
+    if (mes < 1U || mes > 12U) {
+      mes = 1U;
+    }
+    if (ano > 99U) {
+      ano = 0U;
+    }
+
+    if (menu_rtc_campo == 0U) {
+      dia = menu_ajusta_circular(dia, 1U, rtc_days_in_month(mes, ano), delta);
+    } else if (menu_rtc_campo == 1U) {
+      mes = menu_ajusta_circular(mes, 1U, 12U, delta);
+      if (dia > rtc_days_in_month(mes, ano)) {
+        dia = rtc_days_in_month(mes, ano);
+      }
+    } else {
+      ano = menu_ajusta_circular(ano, 0U, 99U, delta);
+      if (dia > rtc_days_in_month(mes, ano)) {
+        dia = rtc_days_in_month(mes, ano);
+      }
+    }
+
+    rtc_data_ddmmaa = (dia * 10000U) + (mes * 100U) + ano;
+    return;
+  }
+
+  if (menu_config_item == 9U) {
+    uint32_t hora = rtc_hora_hhmmss / 10000U;
+    uint32_t minuto = (rtc_hora_hhmmss / 100U) % 100U;
+
+    if (menu_rtc_campo == 0U) {
+      hora = menu_ajusta_circular(hora, 0U, 23U, delta);
+    } else {
+      minuto = menu_ajusta_circular(minuto, 0U, 59U, delta);
+    }
+
+    rtc_hora_hhmmss = (hora * 10000U) + (minuto * 100U);
   }
 }
 
@@ -1329,10 +1418,38 @@ static void menu_display_lista(void) {
   case 7:
     display_set_digits(DSP_P, DSP_0, DSP_8, DSP_P, DSP_E, DSP_R);
     break;
+  case 8:
+    display_set_digits(DSP_P, DSP_0, DSP_9, DSP_D, DSP_A, DSP_T);
+    break;
+  case 9:
+    display_set_digits(DSP_P, DSP_1, DSP_0, DSP_H, DSP_O, DSP_R);
+    break;
   default:
     display_set_digits(DSP_P, DSP_0, DSP_1, DSP_OFF, DSP_OFF, DSP_T);
     break;
   }
+  display_set_decimal_points(2, 0);
+}
+
+static void menu_display_rtc_edicao(uint32_t valor) {
+  uint8_t digitos[6] = {
+      (uint8_t)((valor / 100000U) % 10U), (uint8_t)((valor / 10000U) % 10U),
+      (uint8_t)((valor / 1000U) % 10U),  (uint8_t)((valor / 100U) % 10U),
+      (uint8_t)((valor / 10U) % 10U),    (uint8_t)(valor % 10U)};
+  uint8_t apagar = 0U;
+  uint8_t inicio = (uint8_t)(menu_rtc_campo * 2U);
+
+  if (menu_rtc_visualiza_timeout == 0U) {
+    apagar = ((HAL_GetTick() / 500U) & 1U) ? 1U : 0U;
+  }
+
+  if (apagar) {
+    digitos[inicio] = DSP_OFF;
+    digitos[inicio + 1U] = DSP_OFF;
+  }
+
+  display_set_digits(digitos[0], digitos[1], digitos[2], digitos[3],
+                     digitos[4], digitos[5]);
   display_set_decimal_points(2, 0);
 }
 
@@ -1382,6 +1499,10 @@ static void menu_display_edicao(void) {
     l1 = DSP_E;
     l0 = DSP_R;
     break;
+  case 8:
+  case 9:
+    menu_display_rtc_edicao(valor);
+    return;
   default:
     break;
   }
@@ -1397,7 +1518,7 @@ static void menu_display_edicao(void) {
 
   display_set_digits(l2, l1, l0, (valor / 100U) % 10U,
                      (valor / 10U) % 10U, valor % 10U);
-  display_set_decimal_points(2, 0x02);
+  display_set_decimal_points(2, (menu_config_item <= 3U) ? 0x02 : 0);
 }
 
 static void modo_secagem(void) {
@@ -1412,32 +1533,36 @@ static void modo_secagem(void) {
 static void modo_menu_checkpoint(void) {
   static uint8_t relogio_anterior = 0;
   static uint8_t sair_pendente = 0;
-  static uint8_t splash_sair_mostrada = 0;
   int32_t valor = menu_get_valor_atual();
   uint8_t enter_solto = relogio_anterior && !btn_relogio_status;
   relogio_anterior = btn_relogio_status;
+
+  if (menu_bloqueia_primeira_soltura) {
+    enter_solto = 0;
+    if (!btn_relogio_status) {
+      menu_bloqueia_primeira_soltura = 0;
+      relogio_anterior = 0;
+    }
+  }
 
   controle_soprador_e_alarmes();
 
   if (!menu_editando) {
     if (btn_relogio_status && tac_relogio_timeout >= 60U) {
       sair_pendente = 1;
-      if (!splash_sair_mostrada) {
-        splash_sair_mostrada = 1;
-        splash_screen(20, DSP_MINUS, DSP_S, DSP_A, DSP_I, DSP_R, DSP_MINUS);
-      }
+      splash_screen(4, DSP_MINUS, DSP_S, DSP_A, DSP_I, DSP_R, DSP_MINUS);
       return;
     }
 
     if (btn_max_status && btn_max_timeout == 0) {
-      menu_config_item = (uint8_t)((menu_config_item + 1U) % 8U);
+      menu_config_item = (uint8_t)((menu_config_item + 1U) % 10U);
       btn_max_timeout = 5;
     } else if (!btn_max_status) {
       btn_max_timeout = 1;
     }
 
     if (btn_min_status && btn_min_timeout == 0) {
-      menu_config_item = (menu_config_item == 0U) ? 7U
+      menu_config_item = (menu_config_item == 0U) ? 9U
                                                   : (uint8_t)(menu_config_item - 1U);
       btn_min_timeout = 5;
     } else if (!btn_min_status) {
@@ -1449,14 +1574,13 @@ static void modo_menu_checkpoint(void) {
     if (enter_solto) {
       if (sair_pendente) {
         sair_pendente = 0;
-        splash_sair_mostrada = 0;
         modo = 0;
-        tela_alterna_timeout = 0;
-        splash_screen(10, DSP_MINUS, DSP_0, DSP_K, DSP_OFF, DSP_OFF,
-                      DSP_MINUS);
+        splash_timeout = 0;
         return;
       }
       menu_editando = 1;
+      menu_rtc_campo = 0;
+      menu_rtc_visualiza_timeout = 0;
       btn_max_turbo = 0;
       btn_min_turbo = 0;
       splash_timeout = 0;
@@ -1465,38 +1589,50 @@ static void modo_menu_checkpoint(void) {
   }
 
   if (btn_max_status && btn_max_timeout == 0) {
-    if (btn_max_turbo >= 30)
-      valor += 100;
-    else if (btn_max_turbo >= 20)
-      valor += 20;
-    else if (btn_max_turbo >= 10)
-      valor += 10;
-    else
-      valor += 1;
+    if (menu_item_rtc()) {
+      menu_rtc_ajusta_campo(1);
+      menu_rtc_visualiza_timeout = 20U;
+      btn_max_timeout = 7;
+    } else {
+      if (btn_max_turbo >= 30)
+        valor += 100;
+      else if (btn_max_turbo >= 20)
+        valor += 20;
+      else if (btn_max_turbo >= 10)
+        valor += 10;
+      else
+        valor += 1;
 
-    menu_set_valor_atual(valor);
-    if (btn_max_turbo < 30)
-      btn_max_turbo++;
-    btn_max_timeout = (btn_max_turbo >= 5) ? 4 : 7;
+      menu_set_valor_atual(valor);
+      if (btn_max_turbo < 30)
+        btn_max_turbo++;
+      btn_max_timeout = (btn_max_turbo >= 5) ? 4 : 7;
+    }
   } else if (!btn_max_status) {
     btn_max_timeout = 2;
     btn_max_turbo = 0;
   }
 
   if (btn_min_status && btn_min_timeout == 0) {
-    if (btn_min_turbo >= 30)
-      valor -= 100;
-    else if (btn_min_turbo >= 20)
-      valor -= 20;
-    else if (btn_min_turbo >= 10)
-      valor -= 10;
-    else
-      valor -= 1;
+    if (menu_item_rtc()) {
+      menu_rtc_ajusta_campo(-1);
+      menu_rtc_visualiza_timeout = 20U;
+      btn_min_timeout = 7;
+    } else {
+      if (btn_min_turbo >= 30)
+        valor -= 100;
+      else if (btn_min_turbo >= 20)
+        valor -= 20;
+      else if (btn_min_turbo >= 10)
+        valor -= 10;
+      else
+        valor -= 1;
 
-    menu_set_valor_atual(valor);
-    if (btn_min_turbo < 30)
-      btn_min_turbo++;
-    btn_min_timeout = (btn_min_turbo >= 5) ? 4 : 7;
+      menu_set_valor_atual(valor);
+      if (btn_min_turbo < 30)
+        btn_min_turbo++;
+      btn_min_timeout = (btn_min_turbo >= 5) ? 4 : 7;
+    }
   } else if (!btn_min_status) {
     btn_min_timeout = 2;
     btn_min_turbo = 0;
@@ -1505,35 +1641,39 @@ static void modo_menu_checkpoint(void) {
   menu_display_edicao();
 
   if (enter_solto) {
+    if (menu_item_rtc() && menu_rtc_campo < (menu_rtc_qtd_campos() - 1U)) {
+      menu_rtc_campo++;
+      menu_rtc_visualiza_timeout = 0;
+      return;
+    }
+
     if (menu_config_item == 6U && datalog_reset_confirm) {
       datalog_reset();
       datalog_reset_confirm = 0;
     }
-    salva_config_secagem_flash();
+    if (menu_config_item == 8U || menu_config_item == 9U) {
+      if (!rtc_aplica_compacto(rtc_data_ddmmaa, rtc_hora_hhmmss)) {
+        splash_screen(8, DSP_E, DSP_R, DSP_R, DSP_OFF, DSP_OFF, DSP_OFF);
+        return;
+      }
+    } else {
+      salva_config_secagem_flash();
+    }
     menu_editando = 0;
+    menu_rtc_campo = 0;
+    menu_rtc_visualiza_timeout = 0;
     sair_pendente = 0;
-    splash_sair_mostrada = 0;
-    splash_screen(8, DSP_MINUS, DSP_0, DSP_K, DSP_OFF, DSP_OFF, DSP_MINUS);
+    splash_screen(8, DSP_MINUS, DSP_S, DSP_A, DSP_V, DSP_E, DSP_MINUS);
   }
 }
 
 static void modo_diagnostico(void) {
   controle_soprador_e_alarmes();
 
-  if (tela_alterna_timeout == 0U) {
-    tela_alterna_timeout = 40U;
-    diag_tela_12v = !diag_tela_12v;
-  }
-
-  if (diag_tela_12v) {
-    atualiza_display_tensao(tensao_12v_mV, 1);
-  } else {
-    atualiza_display_tensao(tensao_5v_mV, 0);
-  }
+  atualiza_display_tensoes_diagnostico();
 
   if (btn_relogio_status || diag_timeout_50ms == 0U) {
     modo = 0;
-    tela_alterna_timeout = 0;
   }
 }
 
@@ -1544,20 +1684,11 @@ static void processa_tick_50ms(void) {
     tac_relogio_timeout = 0;
   }
 
-  if (atualiza_display_timeout > 0) {
-    atualiza_display_timeout--;
-  }
   if (buzzer_periodo_timeout > 0) {
     buzzer_periodo_timeout--;
   }
   if (buzzer_ligado_timeout > 0) {
     buzzer_ligado_timeout--;
-  }
-
-  if (btn_min_status && btn_max_status && reset_contador_timeout < 65535U) {
-    reset_contador_timeout++;
-  } else {
-    reset_contador_timeout = 0;
   }
 
   if (tempo_baixa_timeout > 0U) {
@@ -1566,205 +1697,20 @@ static void processa_tick_50ms(void) {
   if (rele_comutacao_timeout > 0U) {
     rele_comutacao_timeout--;
   }
-  if (tela_alterna_timeout > 0U) {
-    tela_alterna_timeout--;
-  }
   if (diag_timeout_50ms > 0U) {
     diag_timeout_50ms--;
   }
-}
-
-static void trata_tac_relogio_press(void) {
-  static uint8_t trava = 0;
-  uint16_t tempo_minimo = (modo == 0) ? 60U : 5U;
-
-  if (trava || !btn_relogio_status || tac_relogio_timeout < tempo_minimo) {
-    if (!btn_relogio_status) {
-      trava = 0;
-    }
-    return;
+  if (serial_log_pausa_50ms > 0U) {
+    serial_log_pausa_50ms--;
   }
-
-  trava = 1;
-
-  if (modo == 0) {
-    setpoint_temp = setpoint_inspecao;
-    modo = 1;
-    splash_screen(20, DSP_S, DSP_E, DSP_T, DSP_1, DSP_N, DSP_S);
-  } else if (modo == 1) {
-    setpoint_inspecao = setpoint_temp;
-    salva_presets_flash();
-    setpoint_temp = setpoint_obriga_inspecao;
-    modo = 2;
-    splash_screen(20, DSP_S, DSP_E, DSP_T, DSP_O, DSP_B, DSP_R);
-  } else if (modo == 2) {
-    setpoint_obriga_inspecao = setpoint_temp;
-    salva_presets_flash();
-    modo = 0;
-    splash_screen(30, DSP_MINUS, DSP_0, DSP_K, DSP_U, DSP_E, DSP_MINUS);
+  if (menu_rtc_visualiza_timeout > 0U) {
+    menu_rtc_visualiza_timeout--;
   }
 }
-
-static void trata_reset_contador(void) {
-  static uint8_t trava = 0;
-
-  if (btn_min_status && btn_max_status && reset_contador_timeout >= 200U) {
-    if (!trava) {
-      trava = 1;
-      contador = 0;
-      ultima_conferencia = 0;
-      ultima_contagem = 0;
-      splash_screen(20, DSP_MINUS, DSP_MINUS, DSP_MINUS, DSP_R, DSP_S, DSP_T);
-      HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01, LOW);
-      HAL_GPIO_WritePin(SAIDA_02_PORT, SAIDA_02, LOW);
-      buzzer_periodo_timeout = 0;
-      buzzer_ligado_timeout = 0;
-      atualiza_display_timeout = 0;
-      salva_dados_imediato();
-    }
-  } else {
-    trava = 0;
-  }
-}
-
-static void atualiza_display_int32(uint32_t valor) {
-  if (atualiza_display_timeout == 0) {
-    atualiza_display_timeout = 2;
-    display_atualiza(valor);
-  }
-}
-
-static void modo_contagem(void) {
-  uint16_t pulsos_pendentes;
-  uint8_t sensor_gabarito_evento;
-
-  if (btn_max_status && !btn_min_status) {
-    atualiza_display_int32(ultima_conferencia);
-  } else {
-    atualiza_display_int32(contador);
-  }
-
-  __disable_irq();
-  pulsos_pendentes = entrada_digital_pulsos_pendentes;
-  entrada_digital_pulsos_pendentes = 0;
-  sensor_gabarito_evento = entrada_digital_02_evento_pendente;
-  entrada_digital_02_evento_pendente = 0;
-  __enable_irq();
-
-  if (pulsos_pendentes > 0U) {
-    contador = (contador + pulsos_pendentes) % (VALOR_MAXIMO + 1U);
-    atualiza_display_timeout = 0;
-  }
-
-  if (sensor_gabarito_evento) {
-    ultima_conferencia = contador;
-    splash_screen(20, DSP_1, DSP_N, DSP_S, DSP_P, DSP_E, DSP_C);
-    salva_dados_imediato();
-  }
-
-  uint32_t diferenca;
-  if (contador >= ultima_conferencia) {
-    diferenca = contador - ultima_conferencia;
-  } else {
-    diferenca = (VALOR_MAXIMO - ultima_conferencia) + contador + 1U;
-  }
-
-  HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01,
-                    (diferenca >= (uint32_t)setpoint_inspecao) ? HIGH : LOW);
-
-  if (diferenca >= (uint32_t)setpoint_obriga_inspecao) {
-    HAL_GPIO_WritePin(SAIDA_02_PORT, SAIDA_02, HIGH);
-    if (buzzer_periodo_timeout == 0 && buzzer_ligado_timeout == 0) {
-      buzzer_ligado_timeout = 20;
-      buzzer_periodo_timeout = 200;
-    }
-    if (buzzer_ligado_timeout == 0 && buzzer_periodo_timeout == 0) {
-      buzzer_ligado_timeout = 20;
-      buzzer_periodo_timeout = 200;
-    }
-  } else {
-    HAL_GPIO_WritePin(SAIDA_02_PORT, SAIDA_02, LOW);
-    buzzer_periodo_timeout = 0;
-    buzzer_ligado_timeout = 0;
-  }
-
-  trata_tac_relogio_press();
-  trata_reset_contador();
-
-  if (contador != ultima_contagem) {
-    display_set_decimal_points(4, 0x01);
-    salva_dados_agendado();
-    ultima_contagem = contador;
-  }
-}
-
-static void modo_setpoint_inspecao(void) {
-  if (btn_max_status && btn_max_timeout == 0) {
-    if (btn_max_turbo >= 30)
-      setpoint_temp += 100;
-    else if (btn_max_turbo >= 20)
-      setpoint_temp += 20;
-    else if (btn_max_turbo >= 10)
-      setpoint_temp += 10;
-    else
-      setpoint_temp += 1;
-
-    if (setpoint_temp > (int32_t)VALOR_MAXIMO)
-      setpoint_temp = VALOR_MAXIMO;
-    if (modo == 1 && setpoint_temp > setpoint_obriga_inspecao)
-      setpoint_temp = setpoint_obriga_inspecao;
-    if (modo == 2 && setpoint_temp < setpoint_inspecao)
-      setpoint_temp = setpoint_inspecao;
-
-    if (btn_max_turbo < 30)
-      btn_max_turbo++;
-    btn_max_timeout = (btn_max_turbo >= 5) ? 4 : 7;
-    atualiza_display_timeout = 0;
-  } else if (!btn_max_status) {
-    btn_max_timeout = 2;
-    btn_max_turbo = 0;
-  }
-
-  if (btn_min_status && btn_min_timeout == 0) {
-    if (btn_min_turbo >= 30)
-      setpoint_temp -= 100;
-    else if (btn_min_turbo >= 20)
-      setpoint_temp -= 20;
-    else if (btn_min_turbo >= 10)
-      setpoint_temp -= 10;
-    else
-      setpoint_temp -= 1;
-
-    if (setpoint_temp < 0)
-      setpoint_temp = 0;
-    if (modo == 1 && setpoint_temp > setpoint_obriga_inspecao)
-      setpoint_temp = setpoint_obriga_inspecao;
-    if (modo == 2 && setpoint_temp < setpoint_inspecao)
-      setpoint_temp = setpoint_inspecao;
-
-    if (btn_min_turbo < 30)
-      btn_min_turbo++;
-    btn_min_timeout = (btn_min_turbo >= 5) ? 4 : 7;
-    atualiza_display_timeout = 0;
-  } else if (!btn_min_status) {
-    btn_min_timeout = 2;
-    btn_min_turbo = 0;
-  }
-
-  atualiza_display_int32((uint32_t)setpoint_temp);
-  trata_tac_relogio_press();
-}
-
-void ativa_alarme(void) {}
-
-void btn_relogio_processado(void) {}
 
 static void prepara_dados_eeprom(void) {
   dados.assinatura = EEPROM_ASSINATURA_APP;
-  dados.contador = contador;
-  dados.ultima_conferencia = ultima_conferencia;
   dados.setpoint_01 = (uint32_t)setpoint_temperatura_dC;
-  dados.setpoint_obrigatorio_01 = (uint32_t)limite_temperatura_alta_dC;
   dados.histerese_temperatura_dC = (uint32_t)histerese_temperatura_dC;
   dados.limite_temperatura_alta_dC = (uint32_t)limite_temperatura_alta_dC;
   dados.limite_temperatura_baixa_dC = (uint32_t)limite_temperatura_baixa_dC;
@@ -1772,32 +1718,12 @@ static void prepara_dados_eeprom(void) {
   dados.gur_umidade = gur_umidade;
 }
 
-static void salva_dados_agendado(void) {
-  prepara_dados_eeprom();
-  eeprom_flagaux_salvar = 1;
-}
-
-static void salva_dados_imediato(void) {
-  prepara_dados_eeprom();
-  eeprom_write(&dados);
-  eeprom_process();
-  eeprom_flagaux_salvar = 0;
-}
-
-static void salva_presets_flash(void) {
-  prepara_dados_eeprom();
-  eeprom_write_config(&dados);
-}
-
 static void carrega_config(void) {
   dados = eeprom_read();
 
   if (dados.assinatura != EEPROM_ASSINATURA_APP) {
     dados.assinatura = EEPROM_ASSINATURA_APP;
-    dados.contador = 0;
-    dados.ultima_conferencia = 0;
     dados.setpoint_01 = (uint32_t)setpoint_temperatura_dC;
-    dados.setpoint_obrigatorio_01 = (uint32_t)limite_temperatura_alta_dC;
     dados.histerese_temperatura_dC = (uint32_t)histerese_temperatura_dC;
     dados.limite_temperatura_alta_dC = (uint32_t)limite_temperatura_alta_dC;
     dados.limite_temperatura_baixa_dC = (uint32_t)limite_temperatura_baixa_dC;
@@ -1818,9 +1744,6 @@ static void carrega_config(void) {
   if (dados.limite_temperatura_alta_dC > 0U &&
       dados.limite_temperatura_alta_dC <= 999U) {
     limite_temperatura_alta_dC = (int32_t)dados.limite_temperatura_alta_dC;
-  } else if (dados.setpoint_obrigatorio_01 > 0U &&
-             dados.setpoint_obrigatorio_01 <= 999U) {
-    limite_temperatura_alta_dC = (int32_t)dados.setpoint_obrigatorio_01;
   }
   if (dados.limite_temperatura_baixa_dC <= 999U) {
     limite_temperatura_baixa_dC = (int32_t)dados.limite_temperatura_baixa_dC;
@@ -1844,21 +1767,30 @@ static void carrega_config(void) {
     dados.datalog_periodo_s = datalog_periodo_s;
   }
 
-  contador = dados.contador;
-  if (contador > VALOR_MAXIMO)
-    contador = 0;
-
-  ultima_conferencia = dados.ultima_conferencia;
-  if (ultima_conferencia > VALOR_MAXIMO)
-    ultima_conferencia = 0;
-
-  ultima_contagem = contador;
-  atualiza_display_timeout = 0;
+  prepara_dados_eeprom();
 }
 
 static void serial_init_rx(void) {
+  __disable_irq();
+  serial_rx_posicao_fifo = 0;
+  serial_rx_posicao_leitura = 0;
+  serial_rx_ultimo_byte = 0;
+  serial_rx_penultimo_byte = 0;
+  serial_rx_timeout_ms = 0;
+  serial_rx_overflow = 0;
+  serial_rx_error_isr = 0;
+  __enable_irq();
+
+  (void)USART1->SR;
   (void)USART1->DR;
-  USART1->CR1 |= USART_CR1_RXNEIE;
+  USART1->CR3 |= USART_CR3_EIE;
+  USART1->CR1 |= USART_CR1_RXNEIE | USART_CR1_PEIE;
+}
+
+void serial_tick_1ms(void) {
+  if (serial_rx_timeout_ms > 0U) {
+    serial_rx_timeout_ms--;
+  }
 }
 
 static void serial_send_text(const char *text) {
@@ -1928,6 +1860,34 @@ static uint8_t serial_parse_hex_u16(const char *text, uint16_t *value) {
   return 1;
 }
 
+static uint8_t serial_parse_u32_strict(const char *text, uint32_t *value) {
+  uint32_t result = 0;
+
+  if (text == NULL || *text == '\0') {
+    return 0;
+  }
+
+  while (*text != '\0') {
+    if (*text < '0' || *text > '9') {
+      return 0;
+    }
+    result = (result * 10U) + (uint32_t)(*text - '0');
+    text++;
+  }
+
+  *value = result;
+  return 1;
+}
+
+static uint8_t serial_text_is_digits(const char *text, uint8_t expected_len) {
+  for (uint8_t i = 0; i < expected_len; i++) {
+    if (text[i] < '0' || text[i] > '9') {
+      return 0;
+    }
+  }
+  return text[expected_len] == '\0';
+}
+
 static void serial_send_packet(uint8_t cmd, const char *payload) {
   char body[180];
   char frame[196];
@@ -1972,7 +1932,10 @@ static uint8_t serial_apply_config_list(const char *payload) {
     }
 
     *sep = '\0';
-    valor = strtoul(sep + 1, NULL, 10);
+    if (!serial_parse_u32_strict(sep + 1, &valor)) {
+      menu_config_item = item_anterior;
+      return 0;
+    }
 
     if (strcmp(token, "SP") == 0) {
       menu_config_item = 0;
@@ -2006,6 +1969,76 @@ static uint8_t serial_apply_config_list(const char *payload) {
   return aplicou;
 }
 
+static uint8_t serial_apply_config_command(const char *cmd) {
+  static const char *nomes[] = {"SP=",  "HIS=", "ALT=", "BAI=",
+                                "ZUR=", "GUR=", "PER="};
+  const char *payload = cmd;
+
+  if (strncmp(cmd, "04 ", 3) == 0) {
+    payload = cmd + 3;
+  } else if (strncmp(cmd, "CFG ", 4) == 0) {
+    payload = cmd + 4;
+  } else {
+    uint8_t conhecido = 0;
+    for (uint8_t i = 0; i < (sizeof(nomes) / sizeof(nomes[0])); i++) {
+      if (strncmp(cmd, nomes[i], strlen(nomes[i])) == 0) {
+        conhecido = 1;
+        break;
+      }
+    }
+    if (!conhecido) {
+      return 0;
+    }
+  }
+
+  return serial_apply_config_list(payload) ? 1U : 2U;
+}
+
+static uint8_t serial_parse_decimal_field(const char **text, uint32_t *value) {
+  uint32_t result = 0;
+  uint8_t digits = 0;
+
+  while (**text >= '0' && **text <= '9') {
+    result = (result * 10U) + (uint32_t)(**text - '0');
+    (*text)++;
+    digits++;
+  }
+
+  if (digits == 0U) {
+    return 0;
+  }
+
+  *value = result;
+  return 1;
+}
+
+static uint8_t serial_parse_log_command(const char *cmd, uint32_t *indice,
+                                        uint32_t *quantidade) {
+  const char *payload = NULL;
+
+  if (strncmp(cmd, "06 ", 3) == 0) {
+    payload = cmd + 3;
+  } else if (strncmp(cmd, "LOG ", 4) == 0) {
+    payload = cmd + 4;
+  } else {
+    return 0;
+  }
+
+  if (!serial_parse_decimal_field(&payload, indice)) {
+    return 2;
+  }
+
+  *quantidade = 1U;
+  if (*payload == ',') {
+    payload++;
+    if (!serial_parse_decimal_field(&payload, quantidade)) {
+      return 2;
+    }
+  }
+
+  return (*payload == '\0') ? 1U : 2U;
+}
+
 static uint8_t serial_log_send_record(uint16_t indice) {
   char payload[150];
   datalog_record_t record = {0};
@@ -2034,6 +2067,9 @@ static uint8_t serial_log_send_record(uint16_t indice) {
 static void serial_log_start(uint16_t indice, uint16_t quantidade) {
   uint16_t total = serial_get_datalog_total();
 
+  serial_log_enviando = 0;
+  serial_log_restante = 0;
+
   if (!datalog_ok || indice >= total) {
     serial_send_packet(0x7F, "E06");
     return;
@@ -2053,11 +2089,16 @@ static void serial_log_process(void) {
     return;
   }
 
+  if (serial_log_pausa_50ms > 0U) {
+    return;
+  }
+
   if (!serial_log_send_record(serial_log_indice)) {
     serial_log_enviando = 0;
     return;
   }
 
+  serial_log_pausa_50ms = 1U;
   serial_log_indice++;
   serial_log_restante--;
   if (serial_log_restante == 0U) {
@@ -2068,15 +2109,10 @@ static void serial_log_process(void) {
 static void serial_handle_command(const char *cmd) {
   char payload[150];
   char decoded_cmd[180];
-  uint32_t valor = 0;
   uint32_t indice = 0;
   uint32_t quantidade = 0;
-  uint32_t ano = 0;
-  uint32_t mes = 0;
-  uint32_t dia = 0;
-  uint32_t hora = 0;
-  uint32_t minuto = 0;
-  uint32_t segundo = 0;
+  uint8_t cfg_result = 0;
+  uint8_t log_result = 0;
 
   if (*cmd == '\x02') {
     uint8_t cmd_id = 0;
@@ -2148,95 +2184,57 @@ static void serial_handle_command(const char *cmd) {
              (long)limite_temperatura_baixa_dC, zur_umidade, gur_umidade,
              datalog_periodo_s);
     serial_send_packet(0x83, payload);
-  } else if (strncmp(cmd, "04 ", 3) == 0 || strncmp(cmd, "CFG ", 4) == 0) {
-    const char *lista = (cmd[0] == '0') ? (cmd + 3) : (cmd + 4);
-    if (serial_apply_config_list(lista)) {
+  } else if ((cfg_result = serial_apply_config_command(cmd)) != 0U) {
+    if (cfg_result == 1U) {
       serial_send_packet(0x84, "OK");
     } else {
       serial_send_packet(0x7F, "E04");
     }
-  } else if (sscanf(cmd, "04 SP=%lu", &valor) == 1 ||
-             sscanf(cmd, "SP=%lu", &valor) == 1) {
-    menu_config_item = 0;
-    menu_set_valor_atual((int32_t)valor);
-    salva_config_secagem_flash();
-    serial_send_packet(0x84, "OK");
-  } else if (sscanf(cmd, "04 HIS=%lu", &valor) == 1 ||
-             sscanf(cmd, "HIS=%lu", &valor) == 1) {
-    menu_config_item = 1;
-    menu_set_valor_atual((int32_t)valor);
-    salva_config_secagem_flash();
-    serial_send_packet(0x84, "OK");
-  } else if (sscanf(cmd, "04 ALT=%lu", &valor) == 1 ||
-             sscanf(cmd, "ALT=%lu", &valor) == 1) {
-    menu_config_item = 2;
-    menu_set_valor_atual((int32_t)valor);
-    salva_config_secagem_flash();
-    serial_send_packet(0x84, "OK");
-  } else if (sscanf(cmd, "04 BAI=%lu", &valor) == 1 ||
-             sscanf(cmd, "BAI=%lu", &valor) == 1) {
-    menu_config_item = 3;
-    menu_set_valor_atual((int32_t)valor);
-    salva_config_secagem_flash();
-    serial_send_packet(0x84, "OK");
-  } else if (sscanf(cmd, "04 ZUR=%lu", &valor) == 1 ||
-             sscanf(cmd, "ZUR=%lu", &valor) == 1) {
-    menu_config_item = 4;
-    menu_set_valor_atual((int32_t)valor);
-    salva_config_secagem_flash();
-    serial_send_packet(0x84, "OK");
-  } else if (sscanf(cmd, "04 GUR=%lu", &valor) == 1 ||
-             sscanf(cmd, "GUR=%lu", &valor) == 1) {
-    menu_config_item = 5;
-    menu_set_valor_atual((int32_t)valor);
-    salva_config_secagem_flash();
-    serial_send_packet(0x84, "OK");
-  } else if (sscanf(cmd, "04 PER=%lu", &valor) == 1 ||
-             sscanf(cmd, "PER=%lu", &valor) == 1) {
-    menu_config_item = 7;
-    menu_set_valor_atual((int32_t)valor);
-    salva_config_secagem_flash();
-    serial_send_packet(0x84, "OK");
   } else if (strncmp(cmd, "05", 2) == 0 || strncmp(cmd, "LOG?", 4) == 0) {
-    snprintf(payload, sizeof(payload), "%u,%u,%u,%u", serial_get_datalog_total(),
+    snprintf(payload, sizeof(payload), "%u,%u,%u,%u,%u,%u", serial_get_datalog_total(),
              datalog_header.capacidade, datalog_header.proximo_indice,
-             datalog_periodo_s);
+             datalog_periodo_s, datalog_ok, serial_log_enviando);
     serial_send_packet(0x85, payload);
-  } else if (sscanf(cmd, "06 %lu", &indice) == 1 ||
-             sscanf(cmd, "LOG %lu", &indice) == 1) {
-    quantidade = 1;
-    (void)sscanf(cmd, "06 %lu,%lu", &indice, &quantidade);
-    (void)sscanf(cmd, "LOG %lu,%lu", &indice, &quantidade);
+  } else if ((log_result = serial_parse_log_command(cmd, &indice, &quantidade)) !=
+             0U) {
+    if (log_result != 1U) {
+      serial_send_packet(0x7F, "E06");
+      return;
+    }
+    if (indice > 0xFFFFU || quantidade > 0xFFFFU) {
+      serial_send_packet(0x7F, "E06");
+      return;
+    }
     serial_log_start((uint16_t)indice, (uint16_t)quantidade);
   } else if (strncmp(cmd, "07 CONFIRMA", 11) == 0 ||
              strncmp(cmd, "LOGRST", 6) == 0) {
+    serial_log_enviando = 0;
     datalog_reset();
     serial_send_packet(0x87, datalog_ok ? "OK" : "E07");
-  } else if (sscanf(cmd, "08 %lu-%lu-%lu,%lu:%lu:%lu", &ano, &mes, &dia, &hora,
-                    &minuto, &segundo) == 6) {
-    RTC_TimeTypeDef time = {0};
-    RTC_DateTypeDef date = {0};
+  } else if (strncmp(cmd, "STOPLOG", 7) == 0) {
+    serial_log_enviando = 0;
+    serial_log_restante = 0;
+    serial_send_packet(0x87, "OK");
+  } else if (strncmp(cmd, "08 ", 3) == 0) {
+    char data_txt[7];
+    char hora_txt[7];
+    uint32_t data = 0;
+    uint32_t hora = 0;
+    const char *rtc_texto = cmd + 3;
 
-    if (ano >= 2000U) {
-      ano -= 2000U;
-    }
-    if (ano > 99U || mes < 1U || mes > 12U || dia < 1U || dia > 31U ||
-        hora > 23U || minuto > 59U || segundo > 59U) {
+    if (!serial_text_is_digits(rtc_texto, 12U)) {
       serial_send_packet(0x7F, "E04");
       return;
     }
+    memcpy(data_txt, rtc_texto, 6U);
+    data_txt[6] = '\0';
+    memcpy(hora_txt, &rtc_texto[6], 6U);
+    hora_txt[6] = '\0';
+    data = strtoul(data_txt, NULL, 10);
+    hora = strtoul(hora_txt, NULL, 10);
 
-    time.Hours = (uint8_t)hora;
-    time.Minutes = (uint8_t)minuto;
-    time.Seconds = (uint8_t)segundo;
-    date.Year = (uint8_t)ano;
-    date.Month = (uint8_t)mes;
-    date.Date = (uint8_t)dia;
-    date.WeekDay = RTC_WEEKDAY_MONDAY;
-
-    if (HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN) != HAL_OK ||
-        HAL_RTC_SetDate(&hrtc, &date, RTC_FORMAT_BIN) != HAL_OK) {
-      serial_send_packet(0x7F, "E08");
+    if (!rtc_aplica_compacto(data, hora)) {
+      serial_send_packet(0x7F, "E04");
     } else {
       serial_send_packet(0x88, "OK");
     }
@@ -2259,32 +2257,95 @@ static void serial_handle_command(const char *cmd) {
 }
 
 static void serial_process(void) {
-  while (serial_rx_tail != serial_rx_head) {
-    uint8_t byte = serial_rx_buffer[serial_rx_tail];
-    serial_rx_tail = (uint8_t)((serial_rx_tail + 1U) % sizeof(serial_rx_buffer));
+  uint16_t len = 0;
+  uint8_t overflow = 0;
+  uint8_t erro_uart = 0;
+  uint8_t processar = 0;
 
-    if (byte == '\r' || byte == '\n') {
-      if (serial_cmd_len > 0U) {
-        serial_cmd_buffer[serial_cmd_len] = '\0';
-        serial_handle_command(serial_cmd_buffer);
-        serial_cmd_len = 0;
+  __disable_irq();
+  uint16_t disponivel;
+  if (serial_rx_posicao_fifo >= serial_rx_posicao_leitura) {
+    disponivel = serial_rx_posicao_fifo - serial_rx_posicao_leitura;
+  } else {
+    disponivel = (uint16_t)(SERIAL_RX_BUFFER_SIZE - serial_rx_posicao_leitura +
+                            serial_rx_posicao_fifo);
+  }
+
+  overflow = serial_rx_overflow;
+  erro_uart = serial_rx_error_isr;
+  serial_rx_overflow = 0;
+  serial_rx_error_isr = 0;
+
+  if (disponivel > 0U && serial_rx_timeout_ms == 0U) {
+    processar = 1;
+    while (disponivel > 0U && len < (sizeof(serial_cmd_buffer) - 1U)) {
+      uint8_t byte = serial_rx_buffer[serial_rx_posicao_leitura++];
+      if (serial_rx_posicao_leitura >= SERIAL_RX_BUFFER_SIZE) {
+        serial_rx_posicao_leitura = 0;
       }
-    } else if (serial_cmd_len < (sizeof(serial_cmd_buffer) - 1U)) {
-      serial_cmd_buffer[serial_cmd_len++] = (char)byte;
-    } else {
-      serial_cmd_len = 0;
-      serial_send_packet(0x7F, "E02");
+      disponivel--;
+
+      if (byte == '\r' || byte == '\n') {
+        break;
+      }
+
+      serial_cmd_buffer[len++] = (char)byte;
     }
+
+    if (disponivel > 0U && len >= (sizeof(serial_cmd_buffer) - 1U)) {
+      overflow = 1;
+      serial_rx_posicao_leitura = serial_rx_posicao_fifo;
+    }
+  }
+  __enable_irq();
+
+  if (erro_uart || overflow) {
+    serial_send_packet(0x7F, "E02");
+    return;
+  }
+
+  if (processar && len > 0U) {
+    serial_cmd_buffer[len] = '\0';
+    serial_handle_command(serial_cmd_buffer);
   }
 }
 
 void serial_usart1_irq_handler(void) {
-  if ((USART1->SR & USART_SR_RXNE) != 0) {
+  uint32_t sr = USART1->SR;
+
+  if ((sr & (USART_SR_PE | USART_SR_FE | USART_SR_NE | USART_SR_ORE)) != 0U) {
+    (void)USART1->DR;
+    serial_rx_posicao_fifo = 0;
+    serial_rx_posicao_leitura = 0;
+    serial_rx_ultimo_byte = 0;
+    serial_rx_penultimo_byte = 0;
+    serial_rx_timeout_ms = 0;
+    serial_rx_error_isr = 1;
+    return;
+  }
+
+  if ((sr & USART_SR_RXNE) != 0U) {
     uint8_t byte = (uint8_t)USART1->DR;
-    uint8_t next = (uint8_t)((serial_rx_head + 1U) % sizeof(serial_rx_buffer));
-    if (next != serial_rx_tail) {
-      serial_rx_buffer[serial_rx_head] = byte;
-      serial_rx_head = next;
+    uint16_t proxima_posicao = (uint16_t)(serial_rx_posicao_fifo + 1U);
+    if (proxima_posicao >= SERIAL_RX_BUFFER_SIZE) {
+      proxima_posicao = 0;
+    }
+
+    if (proxima_posicao == serial_rx_posicao_leitura) {
+      serial_rx_overflow = 1;
+      serial_rx_timeout_ms = 0;
+      return;
+    }
+
+    serial_rx_penultimo_byte = serial_rx_ultimo_byte;
+    serial_rx_ultimo_byte = byte;
+    serial_rx_buffer[serial_rx_posicao_fifo] = byte;
+    serial_rx_posicao_fifo = proxima_posicao;
+
+    if (byte == '\r' || byte == '\n') {
+      serial_rx_timeout_ms = 0;
+    } else {
+      serial_rx_timeout_ms = SERIAL_RX_TIMEOUT_MS;
     }
   }
 }

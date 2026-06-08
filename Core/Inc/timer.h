@@ -1,9 +1,3 @@
-/*
- * timer.h
- *
- *  Created on: Apr 1, 2026
- *      Author: Lucas
- */
 
 #ifndef INC_TIMER_H_
 #define INC_TIMER_H_
@@ -37,7 +31,6 @@ extern volatile uint8_t btn_max_status;
 extern volatile uint16_t btn_max_contador;
 extern volatile uint8_t btn_max_borda_anterior;
 extern volatile uint8_t btn_max_turbo;
-extern volatile uint8_t btn_max_evento;
 
 // botão min
 extern volatile uint16_t btn_min_timeout;
@@ -45,25 +38,12 @@ extern volatile uint8_t btn_min_status;
 extern volatile uint16_t btn_min_contador;
 extern volatile uint8_t btn_min_borda_anterior;
 extern volatile uint8_t btn_min_turbo;
-extern volatile uint8_t btn_min_evento;
 
 // botão relogio
 extern volatile uint8_t btn_relogio_status;
 extern volatile uint8_t btn_relogio_borda_anterior;
 extern volatile uint16_t btn_relogio_contador;
 extern volatile uint16_t btn_relogio_hold;
-extern volatile uint8_t btn_relogio_evento;
-
-// entrada digital
-extern volatile uint8_t entrada_digital_status;
-extern volatile uint8_t entrada_digital_borda_anterior;
-extern volatile uint16_t entrada_digital_contador;
-extern volatile uint16_t entrada_digital_pulsos_pendentes;
-
-extern volatile uint8_t entrada_digital_02_status;
-extern volatile uint8_t entrada_digital_02_borda_anterior;
-extern volatile uint8_t entrada_digital_02_contador;
-extern volatile uint8_t entrada_digital_02_evento_pendente;
 
 //outras variaveis
 extern volatile uint16_t splash_timeout;
