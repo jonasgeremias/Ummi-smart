@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "defines.h"
+#include "protocol.h" /* serial_tick_1ms() */
 
 volatile uint16_t timer_1ms = 0;
 volatile uint16_t timer_3ms = 0;

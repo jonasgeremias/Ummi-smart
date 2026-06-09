@@ -52,14 +52,18 @@
 #define TURBO_LEVEL3 3
 
 // leds
-#define LED_01 PC10_pOutDig_LedSts1_Pin
-#define LED_01_PORT PC10_pOutDig_LedSts1_GPIO_Port
-#define LED_02 PC11_pOutDig_LedSts2_Pin
-#define LED_02_PORT PC11_pOutDig_LedSts2_GPIO_Port
-#define LED_03 PC12_pOutDig_LedSts3_Pin
-#define LED_03_PORT PC12_pOutDig_LedSts3_GPIO_Port
-#define LED_04 PC13_pOutDig_LedSts4_Pin
-#define LED_04_PORT PC13_pOutDig_LedSts4_GPIO_Port
+#define LED_01 LED_STATUS1_Pin
+#define LED_01_PORT LED_STATUS1_GPIO_Port
+#define LED_02 LED_STATUS2_Pin
+#define LED_02_PORT LED_STATUS2_GPIO_Port
+#define LED_03 LED_STATUS3_Pin
+#define LED_03_PORT LED_STATUS3_GPIO_Port
+#define LED_04 LED_STATUS4_Pin
+#define LED_04_PORT LED_STATUS4_GPIO_Port
+
+// buzzer
+#define BUZZER SD_BUZZER_Pin
+#define BUZZER_PORT SD_BUZZER_GPIO_Port
 
 // Saídas digitais
 #define SAIDA_01 PC7_PIN_SAIDA_DIGITAL1_Pin

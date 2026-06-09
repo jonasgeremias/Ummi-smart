@@ -6,12 +6,13 @@
 #include <stdint.h>
 
 static volatile uint8_t display = 0;
-static volatile uint8_t unidade = 0;
-static volatile uint8_t dezena = 0;
-static volatile uint8_t centena = 0;
-static volatile uint8_t milhar = 0;
-static volatile uint8_t dezena_milhar = 0;
-static volatile uint8_t centena_milhar = 0;
+/* Inicia apagado (DSP_OFF) para nao piscar "000000" antes da splash. */
+static volatile uint8_t unidade = DSP_OFF;
+static volatile uint8_t dezena = DSP_OFF;
+static volatile uint8_t centena = DSP_OFF;
+static volatile uint8_t milhar = DSP_OFF;
+static volatile uint8_t dezena_milhar = DSP_OFF;
+static volatile uint8_t centena_milhar = DSP_OFF;
 
 volatile uint8_t splash_digits[6] = {0};
 static volatile uint8_t decimal_point_timeout = 0;

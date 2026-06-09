@@ -23,6 +23,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "timer.h"
+#include "protocol.h" /* serial_usart1_irq_handler() */
+#include "defines.h"  /* saidas em estado seguro nos faults */
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -47,7 +49,14 @@
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
-
+/* Desliga reles e buzzer imediatamente (uso em faults). So escreve registradores
+ * de GPIO — seguro em contexto de excecao. */
+static void saidas_off_fault(void)
+{
+  HAL_GPIO_WritePin(SAIDA_01_PORT, SAIDA_01, LOW);
+  HAL_GPIO_WritePin(SAIDA_02_PORT, SAIDA_02, LOW);
+  HAL_GPIO_WritePin(BUZZER_PORT, BUZZER, LOW);
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -70,7 +79,7 @@
 void NMI_Handler(void)
 {
   /* USER CODE BEGIN NonMaskableInt_IRQn 0 */
-
+  saidas_off_fault();
   /* USER CODE END NonMaskableInt_IRQn 0 */
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
    while (1)
@@ -85,7 +94,7 @@ void NMI_Handler(void)
 void HardFault_Handler(void)
 {
   /* USER CODE BEGIN HardFault_IRQn 0 */
-
+  saidas_off_fault();
   /* USER CODE END HardFault_IRQn 0 */
   while (1)
   {
@@ -100,7 +109,7 @@ void HardFault_Handler(void)
 void MemManage_Handler(void)
 {
   /* USER CODE BEGIN MemoryManagement_IRQn 0 */
-
+  saidas_off_fault();
   /* USER CODE END MemoryManagement_IRQn 0 */
   while (1)
   {
@@ -115,7 +124,7 @@ void MemManage_Handler(void)
 void BusFault_Handler(void)
 {
   /* USER CODE BEGIN BusFault_IRQn 0 */
-
+  saidas_off_fault();
   /* USER CODE END BusFault_IRQn 0 */
   while (1)
   {
@@ -130,7 +139,7 @@ void BusFault_Handler(void)
 void UsageFault_Handler(void)
 {
   /* USER CODE BEGIN UsageFault_IRQn 0 */
-
+  saidas_off_fault();
   /* USER CODE END UsageFault_IRQn 0 */
   while (1)
   {

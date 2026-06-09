@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Firmware STM32 para controle de temperatura e registro de dados em estufas de secagem de fumo. O sistema mede temperatura, umidade, tensoes de alimentacao, estado das saidas e status operacional; controla o soprador da fornalha por rele; exibe dados em display de 6 digitos; permite configuracao por menu local e Bluetooth HM-10; e grava historico periodico em EEPROM externa 24AA256.
+Firmware STM32 para controle de temperatura e registro de dados em estufas de secagem de fumo. O sistema mede temperatura, umidade, tensoes de alimentacao, estado das saidas e status operacional; controla o soprador da fornalha por rele; exibe dados em display de 6 digitos; permite configuracao por menu local e Bluetooth HM-10; e grava historico periodico em EEPROM externa 24AA512.
 
 Esta especificacao substitui a aplicacao de contador de pecas, mas deve preservar a infraestrutura funcional ja existente no projeto: varredura do display multiplexado, leitura dos botoes da membrana, turbo de incremento/decremento, temporizacao por tick e pinos de saida a rele `SD_SAIDA1`/`SD_SAIDA2` atualmente mapeados como `SAIDA_01` e `SAIDA_02`.
 
@@ -49,7 +49,7 @@ Parametros de umidade:
 |---|---|
 | USART1 | HM-10 Bluetooth, 115200 8N1 |
 | RTC interno | Data/hora do datalogger usando cristal de 32,768 kHz |
-| I2C1 + 24AA256 | Datalogger em EEPROM externa |
+| I2C1 + 24AA512 | Datalogger em EEPROM externa |
 | Flash/EEPROM de configuracao | Parametros configuraveis e calibracoes |
 
 ## Medicoes
@@ -239,7 +239,7 @@ Menu proposto:
 
 ### Meio Fisico
 
-O datalogger deve ser armazenado na EEPROM externa 24AA256 via I2C1. Usar escrita paginada respeitando limites de pagina da memoria e rotina nao bloqueante sempre que possivel.
+O datalogger deve ser armazenado na EEPROM externa 24AA512 via I2C1. Usar escrita paginada respeitando limites de pagina da memoria e rotina nao bloqueante sempre que possivel.
 
 Implementacao inicial:
 
@@ -438,7 +438,7 @@ Teste esperado:
 |---|---|
 | 2 | Controle do soprador por setpoint/histerese e alarmes basicos |
 | 3 | Menu completo de configuracao e persistencia dos parametros |
-| 4 | Datalogger em 24AA256 com cabecalho, registros e reset |
+| 4 | Datalogger em 24AA512 com cabecalho, registros e reset |
 | 5 | Protocolo serial completo com tempo real, configuracao e leitura assincrona do logger |
 | 6 | Validacao integrada, tratamento de falhas e documentacao final de testes |
 

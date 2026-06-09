@@ -23,7 +23,7 @@ Com base nos defines de pinos existentes no projeto:
 | Analógica 12V | Divisor resistivo 10kΩ + 3k3Ω para GND |
 | USART1 | Módulo Bluetooth HM-10 para configuração e leitura de dados |
 | RTC | Cristal interno 32.768 kHz — usar RTC interno do STM32 |
-| EEPROM externa | 24AA256 — armazenamento do datalogger |
+| EEPROM externa | 24AA512 — armazenamento do datalogger |
 | BUZZER | Alarme de temperatura alta/baixa e outros alertas futuros |
 
 ---
