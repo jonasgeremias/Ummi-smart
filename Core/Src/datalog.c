@@ -53,10 +53,61 @@ static datalog_header_t hdr;
 static bool g_ok;
 static uint32_t ultima_chave_log = 0xFFFFFFFFU; /* anti-duplicidade */
 
+/* Snapshot do anel para o download: fixa a janela logica->fisica no inicio do
+ * envio, evitando que uma amostra gravada no meio da transferencia desloque o
+ * mapeamento (registros duplicados/pulados). */
+static uint16_t dl_snap_proximo;
+static uint16_t dl_snap_qtd;
+
 /* ---------------- EEPROM primitivas ---------------- */
-/* Recupera o barramento I2C travado (NACK/BUSY) re-inicializando o periferico. */
+/* Meia-celula de clock (~5 us @96 MHz) para o bit-bang de recuperacao. O timing
+ * nao e critico para liberar o barramento; basta ficar bem abaixo de 100 kHz. */
+static void i2c_meio_periodo(void) {
+  for (volatile uint32_t i = 0; i < 120U; i++) {
+    __NOP();
+  }
+}
+
+/* Libera o barramento I2C quando um escravo (EEPROM) ficou segurando SDA em
+ * nivel baixo — tipico apos um reset do mestre no meio de uma transferencia.
+ * Um DeInit/Init do periferico NAO resolve isso; e preciso gerar pulsos de SCL
+ * por GPIO ate o escravo completar o byte e soltar SDA, seguidos de um STOP. */
+static void i2c_bus_clear(void) {
+  GPIO_InitTypeDef g = {0};
+
+  HAL_I2C_DeInit(&hi2c1); /* solta PB6/PB7 do modo alternado */
+
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+  g.Pin = GPIO_PIN_6 | GPIO_PIN_7; /* SCL=PB6, SDA=PB7 (open-drain) */
+  g.Mode = GPIO_MODE_OUTPUT_OD;
+  g.Pull = GPIO_PULLUP;
+  g.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &g);
+
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET); /* solta SDA */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET); /* SCL alto  */
+  i2c_meio_periodo();
+
+  for (uint8_t i = 0; i < 9U; i++) { /* ate 9 pulsos = 1 byte + ACK */
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+    i2c_meio_periodo();
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+    i2c_meio_periodo();
+  }
+
+  /* Condicao de STOP: SDA sobe enquanto SCL esta alto. */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
+  i2c_meio_periodo();
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+  i2c_meio_periodo();
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
+  i2c_meio_periodo();
+}
+
+/* Recupera o barramento I2C: primeiro destrava o escravo (pulsos de SCL),
+ * depois re-inicializa o periferico (restaura PB6/PB7 em modo alternado). */
 static void i2c_recupera(void) {
-  HAL_I2C_DeInit(&hi2c1);
+  i2c_bus_clear();
   HAL_I2C_Init(&hi2c1);
 }
 
@@ -299,6 +350,25 @@ bool datalog_le_bloco(uint16_t indice_logico,
   /* indice 0 = mais antigo */
   uint16_t fisico = (uint16_t)((hdr.proximo_indice + hdr.capacidade -
                                 hdr.quantidade_valida + indice_logico) %
+                               hdr.capacidade);
+  if (!ext_read(rec_addr(fisico), bloco, DATALOG_RECORD_SIZE)) return false;
+  if (bloco[8] != crc_xor8(bloco, 8)) return false;
+  return true;
+}
+
+uint16_t datalog_download_inicia(void) {
+  dl_snap_proximo = hdr.proximo_indice;
+  dl_snap_qtd = g_ok ? hdr.quantidade_valida : 0U;
+  return dl_snap_qtd;
+}
+
+bool datalog_download_le(uint16_t indice_logico,
+                         uint8_t bloco[DATALOG_RECORD_SIZE]) {
+  if (!g_ok || indice_logico >= dl_snap_qtd) return false;
+
+  /* Mapeamento fixado no snapshot (nao usa hdr.* vivo). */
+  uint16_t fisico = (uint16_t)((dl_snap_proximo + hdr.capacidade - dl_snap_qtd +
+                                indice_logico) %
                                hdr.capacidade);
   if (!ext_read(rec_addr(fisico), bloco, DATALOG_RECORD_SIZE)) return false;
   if (bloco[8] != crc_xor8(bloco, 8)) return false;

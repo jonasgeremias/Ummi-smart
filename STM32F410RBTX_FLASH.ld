@@ -185,3 +185,12 @@ SECTIONS
 
   .ARM.attributes 0 : { *(.ARM.attributes) }
 }
+
+/* O setor 4 (0x08010000-0x0801FFFF, 64 KB) e reservado para a configuracao
+ * persistente gravada em runtime por config.c. Sem esta verificacao, um
+ * firmware acima de 64 KB se estenderia para dentro desse setor SEM erro de
+ * link (LENGTH=128K) e seria corrompido na primeira gravacao de config.
+ * A checagem transforma esse conflito em erro de build. */
+_config_flash_start = 0x08010000;
+ASSERT(LOADADDR(.data) + SIZEOF(.data) <= _config_flash_start,
+       "Firmware invadiu o setor de Flash da configuracao (0x08010000). Reduza o codigo ou realoque a config para outro setor.")

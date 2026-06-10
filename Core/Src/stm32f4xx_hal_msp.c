@@ -152,21 +152,14 @@ void HAL_I2C_MspDeInit(I2C_HandleTypeDef* hi2c)
   */
 void HAL_RTC_MspInit(RTC_HandleTypeDef* hrtc)
 {
-  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
   if(hrtc->Instance==RTC)
   {
     /* USER CODE BEGIN RTC_MspInit 0 */
-
+    /* A fonte de clock do RTC (LSE com fallback para LSI) e configurada em
+     * rtc_clock_config() (main.c), antes de MX_RTC_Init. Aqui apenas habilita
+     * o periferico — nao chamar Error_Handler para nao travar a unidade se o
+     * LSE estiver ausente/defeituoso. */
     /* USER CODE END RTC_MspInit 0 */
-
-  /** Initializes the peripherals clock
-  */
-    PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RTC;
-    PeriphClkInitStruct.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
-    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
-    {
-      Error_Handler();
-    }
 
     /* Peripheral clock enable */
     __HAL_RCC_RTC_ENABLE();

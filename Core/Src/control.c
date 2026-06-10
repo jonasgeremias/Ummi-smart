@@ -163,15 +163,20 @@ void control_tick_50ms(void) {
     int32_t ur = (int32_t)sensors_umidade_pct();
     bool evento = algum_evento_ativo(g_config.rele1.eventos, minuto);
     bool fonte_temp = false, fonte_ur = false;
+    /* Condicoes que exigem OFF imediato, sem aguardar o anti-chattering. */
+    bool corte_seguro = falha_alim;
 
     if (g_config.rele1.temperatura.habilita) {
       r1_temp_on = falha_t ? false
                            : histerese(r1_temp_on, t, &g_config.rele1.temperatura);
-      /* Seguranca: alarme de temperatura alta inibe o aquecimento (corte
-       * independente da histerese, mesmo no modo trava). */
-      if (alm_t_alta &&
-          g_config.rele1.temperatura.logica == RELE_LOGICA_AQUECER) {
+      /* Seguranca: corta o aquecimento (sem atraso e mesmo no modo trava) no
+       * alarme de temperatura alta OU ao ultrapassar o limite absoluto de
+       * hardware. Este ultimo protege mesmo com o alarme configuravel
+       * desabilitado (default de fabrica). */
+      if (g_config.rele1.temperatura.logica == RELE_LOGICA_AQUECER &&
+          (alm_t_alta || (!falha_t && t >= TEMP_CORTE_ABS_C))) {
         r1_temp_on = false;
+        corte_seguro = true; /* sobretemperatura: corta sem atraso */
       }
       fonte_temp = r1_temp_on;
     }
@@ -184,7 +189,7 @@ void control_tick_50ms(void) {
     if (falha_alim) novo1 = false;
 
     if (novo1 != rele1_estado) {
-      if (!novo1 && falha_alim) {
+      if (!novo1 && corte_seguro) {
         rele1_estado = false; /* OFF seguro imediato */
         r1_comut_to = COMUTACAO_MIN_50MS;
       } else if (r1_comut_to == 0U) {
@@ -200,14 +205,19 @@ void control_tick_50ms(void) {
     int32_t ur = (int32_t)sensors_umidade_pct();
     bool evento = algum_evento_ativo(g_config.rele2.eventos, minuto);
     bool fonte_temp = false, fonte_ur = false;
+    /* Condicoes que exigem OFF imediato, sem aguardar o anti-chattering. */
+    bool corte_seguro = falha_alim;
 
     if (g_config.rele2.temperatura.habilita) {
       r2_temp_on = falha_t ? false
                            : histerese(r2_temp_on, t, &g_config.rele2.temperatura);
-      /* Seguranca: alarme de temperatura alta inibe o aquecimento. */
-      if (alm_t_alta &&
-          g_config.rele2.temperatura.logica == RELE_LOGICA_AQUECER) {
+      /* Seguranca: corta o aquecimento no alarme de temperatura alta OU ao
+       * ultrapassar o limite absoluto de hardware (protege mesmo com o alarme
+       * configuravel desabilitado). */
+      if (g_config.rele2.temperatura.logica == RELE_LOGICA_AQUECER &&
+          (alm_t_alta || (!falha_t && t >= TEMP_CORTE_ABS_C))) {
         r2_temp_on = false;
+        corte_seguro = true; /* sobretemperatura: corta sem atraso */
       }
       fonte_temp = r2_temp_on;
     }
@@ -220,7 +230,7 @@ void control_tick_50ms(void) {
     if (falha_alim) novo2 = false;
 
     if (novo2 != rele2_estado) {
-      if (!novo2 && falha_alim) {
+      if (!novo2 && corte_seguro) {
         rele2_estado = false;
         r2_comut_to = COMUTACAO_MIN_50MS;
       } else if (r2_comut_to == 0U) {

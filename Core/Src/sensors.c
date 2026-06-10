@@ -50,6 +50,7 @@ typedef struct {
   uint16_t buffer[MEDIA_N];
   uint32_t soma;
   uint8_t idx;
+  uint8_t cnt; /* amostras ja acumuladas (satura em MEDIA_N) */
 } media_t;
 
 static media_t m_umid, m_temp, m_ref, m_v5, m_v12;
@@ -118,8 +119,13 @@ static uint16_t media_passo(media_t *f, uint16_t nova) {
   if (++f->idx >= MEDIA_N) {
     f->idx = 0;
   }
-  /* divisao por MEDIA_N (6) */
-  return (uint16_t)(f->soma / MEDIA_N);
+  /* Durante o aquecimento (buffer ainda parcialmente preenchido) divide pelo
+   * numero real de amostras, evitando subestimar a media (ex.: falha_alim
+   * espuria no boot, pois v5/v12 nao sao protegidos por sensors_estavel). */
+  if (f->cnt < MEDIA_N) {
+    f->cnt++;
+  }
+  return (uint16_t)(f->soma / f->cnt);
 }
 
 /* Atualiza o estado de desconexao de um sensor pelo ADC bruto medio:

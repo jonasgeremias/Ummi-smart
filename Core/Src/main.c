@@ -71,6 +71,7 @@ static void MX_USART6_Init(void);
 static void iwdg_start(void);
 void iwdg_refresh(void); /* publico: chamado por config.c durante o erase da Flash */
 static void saidas_estado_seguro(void);
+static void rtc_clock_config(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -104,6 +105,7 @@ int main(void)
   MX_GPIO_Init();
   saidas_estado_seguro();
   MX_I2C1_Init();
+  rtc_clock_config(); /* LSE com fallback LSI, antes de inicializar o RTC */
   MX_RTC_Init();
   MX_USART1_Init();
   MX_USART6_Init();
@@ -167,8 +169,9 @@ void SystemClock_Config(void)
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSE;
-  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
+  /* LSE removido daqui: a fonte do RTC e configurada em rtc_clock_config() com
+   * fallback para LSI, para nao depender do cristal de 32 kHz no boot. */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
@@ -285,11 +288,55 @@ static void MX_USART6_Init(void)
   */
 static void iwdg_start(void)
 {
+  /* Timeout = RLR * prescaler / f_LSI. O LSI do STM32F4 tem tolerancia larga
+   * (~17..47 kHz), entao o pior caso (LSI rapido) encurta o timeout:
+   *   /64, RLR=2500 -> ~5,0 s nominal (32 kHz); ~3,4 s (47 kHz); ~9,4 s (17 kHz)
+   * Dimensionado para cobrir com folga o erase do setor de 64 KB (~2 s, ate
+   * ~2,5 s no pior caso) realimentado imediatamente antes em config_salva().
+   * Com RLR=1250 (2,5 s nom.) o pior caso caia para ~1,7 s, abaixo do erase. */
   IWDG->KR = 0x5555U;   /* habilita escrita em PR/RLR */
   IWDG->PR = 0x04U;     /* prescaler /64 */
-  IWDG->RLR = 1250U;    /* reload */
+  IWDG->RLR = 2500U;    /* reload (~5 s nominal) */
   IWDG->KR = 0xAAAAU;   /* refresh inicial */
   IWDG->KR = 0xCCCCU;   /* start */
+}
+
+/**
+  * @brief Configura a fonte de clock do RTC com fallback.
+  *        Tenta o LSE (cristal 32.768 kHz); se ele nao partir (cristal ausente
+  *        ou defeituoso), cai para o LSI interno. Evita que a unidade fique
+  *        inoperante (boot travado no Error_Handler) apenas por causa do RTC.
+  *        No fallback o relogio fica menos preciso (deriva do LSI), mas o
+  *        controle de temperatura/umidade e o datalogger continuam operando.
+  *        Deve ser chamada com o acesso ao dominio de backup ja habilitado e
+  *        antes de MX_RTC_Init().
+  */
+static void rtc_clock_config(void)
+{
+  RCC_OscInitTypeDef osc = {0};
+  RCC_PeriphCLKInitTypeDef pclk = {0};
+
+  osc.OscillatorType = RCC_OSCILLATORTYPE_LSE;
+  osc.PLL.PLLState = RCC_PLL_NONE; /* nao mexe no PLL ja configurado */
+  osc.LSEState = RCC_LSE_ON;
+  if (HAL_RCC_OscConfig(&osc) == HAL_OK) {
+    pclk.PeriphClockSelection = RCC_PERIPHCLK_RTC;
+    pclk.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
+    if (HAL_RCCEx_PeriphCLKConfig(&pclk) == HAL_OK) {
+      return; /* LSE OK */
+    }
+  }
+
+  /* Fallback: LSI (~32 kHz nominal; os predividers do RTC ficam aproximados). */
+  osc.OscillatorType = RCC_OSCILLATORTYPE_LSI;
+  osc.PLL.PLLState = RCC_PLL_NONE;
+  osc.LSEState = RCC_LSE_OFF;
+  osc.LSIState = RCC_LSI_ON;
+  if (HAL_RCC_OscConfig(&osc) == HAL_OK) {
+    pclk.PeriphClockSelection = RCC_PERIPHCLK_RTC;
+    pclk.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
+    (void)HAL_RCCEx_PeriphCLKConfig(&pclk);
+  }
 }
 
 void iwdg_refresh(void)

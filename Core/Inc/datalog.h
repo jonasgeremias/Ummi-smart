@@ -30,4 +30,10 @@ bool datalog_ok(void);
 /* Le bloco logico (0 = mais antigo). Preenche 9 bytes. */
 bool datalog_le_bloco(uint16_t indice_logico, uint8_t bloco[DATALOG_RECORD_SIZE]);
 
+/* Download serial: fixa o snapshot do anel e retorna o total a enviar. */
+uint16_t datalog_download_inicia(void);
+/* Le bloco logico (0 = mais antigo) usando o snapshot de datalog_download_inicia. */
+bool datalog_download_le(uint16_t indice_logico,
+                         uint8_t bloco[DATALOG_RECORD_SIZE]);
+
 #endif /* INC_DATALOG_H_ */

@@ -208,7 +208,7 @@ static void resp_configs(void) {
 /* Download do datalogger                                                 */
 /* ====================================================================== */
 static void download_inicia(void) {
-  dl_total = datalog_total();
+  dl_total = datalog_download_inicia(); /* fixa o snapshot do anel */
   dl_indice = 0;
   dl_ativo = (dl_total > 0U) ? 1U : 0U;
   if (!dl_ativo) {
@@ -229,7 +229,7 @@ static void download_envia_proximo(void) {
     dl_ativo = 0;
     return;
   }
-  if (!datalog_le_bloco(dl_indice, bloco)) {
+  if (!datalog_download_le(dl_indice, bloco)) {
     const uint8_t fim[3] = {'F', 'I', 'M'};
     tx_com_crc(fim, 3);
     dl_ativo = 0;

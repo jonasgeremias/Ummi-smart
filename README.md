@@ -118,7 +118,7 @@ Os dados persistidos sao:
 - Setpoint de inspecao.
 - Setpoint de inspecao obrigatoria.
 
-O backend principal usa EEPROM externa 24x256 via I2C. A gravacao usa dois slots com sequencia e checksum para reduzir risco de perder dados se faltar energia durante escrita.
+A configuracao (`config.c`) e persistida na flash interna do STM32 (setor 4), com assinatura + CRC e gravacao log-structured para distribuir o desgaste. A EEPROM externa I2C (24LC256/24AA512) e usada apenas pelo datalogger (`datalog.c`).
 
 O fallback em flash interna esta desabilitado:
 
@@ -198,4 +198,4 @@ Depois do erase, gravar novamente pelo CubeIDE.
 - Se o sensor de contagem for ativo baixo, alterar `INPUT_01_ACTIVE_LEVEL` para `LOW` e configurar PB8 com `GPIO_PULLUP`.
 - Se o sensor de inspecao for ativo baixo, alterar `INPUT_02_ACTIVE_LEVEL` para `LOW` e configurar PB9 com `GPIO_PULLUP`.
 - Setpoint `0` hoje significa acionamento imediato, pois a condicao e `diferenca >= setpoint`.
-- Nao usar funcoes antigas de `24x256.c` com `HAL_MAX_DELAY` em fluxo critico sem revisar, pois podem bloquear o loop principal.
+- O datalogger fala com a EEPROM externa por `datalog.c` (timeouts curtos, sem `HAL_MAX_DELAY`). O driver legado `24x256.c` foi removido.

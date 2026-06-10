@@ -31,6 +31,12 @@
 #define TEMP_MIN_GRAU 0
 #define TEMP_MAX_GRAU 999
 
+/* Limite ABSOLUTO de seguranca (grau inteiro, na escala em uso). Corta o
+ * aquecimento de forma incondicional, independente do alarme configuravel
+ * (que vem desabilitado de fabrica) e mesmo no modo trava da histerese.
+ * Ultima barreira de software contra runaway termico com sensor coerente. */
+#define TEMP_CORTE_ABS_C 110
+
 /* Tipo de EEPROM externa do datalogger (g_config.eeprom_tipo). */
 #define EEPROM_24LC256 0U /* 32 KB, pagina 64 B (hardware legado) */
 #define EEPROM_24AA512 1U /* 64 KB, pagina 128 B (hardware atual soldado) */

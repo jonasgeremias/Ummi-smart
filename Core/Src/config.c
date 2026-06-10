@@ -144,6 +144,14 @@ void config_valida(ummi_config_t *c) {
   c->alm_temp_baixa_dC = clamp_i32(c->alm_temp_baixa_dC, TEMP_MIN_GRAU, TEMP_MAX_GRAU);
   c->alm_ur_alta_dUR = clamp_i32(c->alm_ur_alta_dUR, 0, 100);
   c->alm_ur_baixa_dUR = clamp_i32(c->alm_ur_baixa_dUR, 0, 100);
+  /* Coerencia: o limite baixo nunca pode exceder o alto (o caminho serial
+   * grava os dois campos direto, sem ordenar). */
+  if (c->alm_temp_baixa_dC > c->alm_temp_alta_dC) {
+    c->alm_temp_baixa_dC = c->alm_temp_alta_dC;
+  }
+  if (c->alm_ur_baixa_dUR > c->alm_ur_alta_dUR) {
+    c->alm_ur_baixa_dUR = c->alm_ur_alta_dUR;
+  }
 
   valida_eventos(c->alm_eventos);
 
